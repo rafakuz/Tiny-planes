@@ -1,0 +1,2170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>✈ Flight Sim</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    /* ── DESIGN TOKENS ───────────────────────────────── */
+    :root {
+      --cyan:    #00d4ff;
+      --cyan-dk: rgba(0,212,255,0.18);
+      --amber:   #ffd200;
+      --green:   #00ff8f;
+      --red:     #ff3b3b;
+      --orange:  #ff8800;
+      --panel:   rgba(2,8,22,0.82);
+      --panel-border: rgba(0,212,255,0.22);
+      --font-hud:  'Share Tech Mono', 'Courier New', monospace;
+      --font-display: 'Orbitron', 'Courier New', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #000;
+      overflow: hidden;
+      font-family: var(--font-hud);
+    }
+
+    #c { display: block; }
+
+    /* ── HUD overlay ─────────────────────────────────── */
+    #hud {
+      position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ── Corner-bracket mixin (applied with .bracketed) ── */
+    .bracketed { position: relative; }
+    .bracketed::before, .bracketed::after,
+    .bracketed > .br-bl, .bracketed > .br-br {
+      content: '';
+      position: absolute;
+      width: 10px; height: 10px;
+      border-color: var(--cyan);
+      border-style: solid;
+      opacity: 0.7;
+    }
+    .bracketed::before { top: 0; left: 0;  border-width: 2px 0 0 2px; }
+    .bracketed::after  { top: 0; right: 0; border-width: 2px 2px 0 0; }
+
+    /* ── Top-left: telemetry ──────────────────────────── */
+    #tele {
+      position: absolute; top: 20px; left: 20px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .tr {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 4px;
+      padding: 6px 12px;
+      backdrop-filter: blur(6px);
+      transition: border-color 0.2s;
+    }
+    .tr:hover { border-color: rgba(0,212,255,0.45); }
+    .tl {
+      font-size: 0.55rem; letter-spacing: 3px;
+      color: var(--cyan); min-width: 28px;
+      text-shadow: 0 0 4px var(--cyan), 0 0 14px rgba(0,212,255,0.6), 0 0 30px rgba(0,212,255,0.2);
+    }
+    .tv {
+      font-family: var(--font-display);
+      font-size: 1rem; font-weight: 600;
+      color: #e8f4f8; min-width: 48px; text-align: right;
+      text-shadow: 0 0 14px rgba(255,255,255,0.35);
+    }
+    .tu {
+      font-size: 0.48rem; letter-spacing: 2.5px;
+      color: rgba(0,212,255,0.38);
+    }
+
+    #tbar-wrap {
+      width: 70px; height: 4px;
+      background: rgba(0,212,255,0.1);
+      border-radius: 2px; overflow: hidden;
+    }
+    #tbar {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--green), var(--cyan));
+      border-radius: 2px;
+      transition: width 0.08s;
+      box-shadow: 0 0 6px var(--cyan);
+    }
+
+    /* ── QR connect card — centered hero at game start ─── */
+    #qcard {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(2,8,24,0.97);
+      border: 1px solid rgba(0,212,255,0.3);
+      border-radius: 12px;
+      padding: 44px 52px 40px;
+      width: 360px;
+      pointer-events: all;
+      z-index: 50;
+      transition: opacity 0.5s, transform 0.5s;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 0 80px rgba(0,212,255,0.07), 0 32px 80px rgba(0,0,0,0.8);
+      display: flex; flex-direction: column; align-items: center;
+    }
+    /* corner brackets */
+    #qcard::before {
+      content:''; position:absolute; top:14px; left:14px;
+      width:18px; height:18px;
+      border:2px solid var(--cyan); border-right:0; border-bottom:0;
+      opacity:0.5;
+    }
+    #qcard::after {
+      content:''; position:absolute; top:14px; right:14px;
+      width:18px; height:18px;
+      border:2px solid var(--cyan); border-left:0; border-bottom:0;
+      opacity:0.5;
+    }
+    #qcard.hide { opacity:0; transform:translate(-50%,-50%) scale(0.95); pointer-events:none; }
+    #qcard h3 {
+      font-family: var(--font-display);
+      font-size: 0.58rem; letter-spacing: 7px;
+      color: var(--cyan); text-transform: uppercase;
+      margin-bottom: 28px; text-align: center;
+      text-shadow: 0 0 12px var(--cyan), 0 0 30px rgba(0,212,255,0.3);
+    }
+    #qrImg {
+      width: 240px; height: 240px;
+      border-radius: 6px; display: block;
+      margin: 0 auto 22px;
+      border: 1px solid rgba(0,212,255,0.18);
+      box-shadow: 0 0 40px rgba(0,212,255,0.08);
+    }
+    #codeDisp {
+      font-family: var(--font-display);
+      text-align: center; font-size: 2.4rem;
+      letter-spacing: 14px; color: #fff;
+      margin-bottom: 14px;
+      text-shadow: 0 0 10px rgba(0,212,255,0.5), 0 0 30px rgba(0,212,255,0.2);
+    }
+    .qhint {
+      font-size: 0.54rem; letter-spacing: 1.5px;
+      color: rgba(0,212,255,0.38); text-align: center; line-height: 1.9;
+    }
+
+    /* ── Phone connected badge ───────────────────────── */
+    #pbadge {
+      position: absolute; top: 20px; right: 20px;
+      background: rgba(0,22,12,0.9);
+      border: 1px solid rgba(0,255,143,0.4);
+      border-radius: 4px;
+      padding: 9px 20px;
+      display: none; align-items: center; gap: 10px;
+      font-family: var(--font-display);
+      font-size: 0.55rem; letter-spacing: 4px; color: var(--green);
+      text-shadow: 0 0 12px var(--green), 0 0 30px rgba(0,255,143,0.3);
+      pointer-events: none;
+      backdrop-filter: blur(6px);
+    }
+    #pbadge.show { display: flex; }
+    .pdot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 10px var(--green), 0 0 20px rgba(0,255,143,0.4);
+      animation: pls 2s ease-in-out infinite;
+    }
+    @keyframes pls { 0%,100%{opacity:1;} 50%{opacity:0.2;} }
+
+    /* ── Top-right: live ring counter ──────────────────── */
+    #ringCount {
+      position: absolute; top: 64px; right: 20px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 4px;
+      padding: 6px 14px;
+      display: none; align-items: center; gap: 10px;
+      pointer-events: none;
+      backdrop-filter: blur(6px);
+      transition: opacity 0.3s;
+    }
+    #ringCount.active { display: flex; }
+    #ringCount .tl { color: var(--amber); text-shadow: 0 0 8px var(--amber); }
+    .rc-val {
+      font-family: var(--font-display);
+      font-size: 0.88rem; font-weight: 700;
+      color: var(--amber);
+      text-shadow: 0 0 10px var(--amber), 0 0 25px rgba(255,210,0,0.3);
+    }
+    .rc-total { opacity: 0.35; font-size: 0.7rem; }
+
+    /* ── Center warnings ─────────────────────────────── */
+    #warn {
+      position: absolute; bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(30,12,0,0.88);
+      border: 1px solid rgba(255,136,0,0.4);
+      border-radius: 4px;
+      padding: 10px 24px;
+      font-size: 0.62rem; letter-spacing: 4px; color: var(--orange);
+      text-shadow: 0 0 10px var(--orange);
+      pointer-events: none;
+      transition: opacity 0.3s;
+      white-space: nowrap;
+    }
+    #warn.hide { opacity: 0; pointer-events: none; }
+
+    #calWarn {
+      position: absolute; top: calc(50% + 50px); left: 50%;
+      transform: translate(-50%, 0);
+      background: rgba(0,8,30,0.82);
+      border: 1px solid rgba(0,212,255,0.25);
+      border-radius: 4px;
+      padding: 8px 18px;
+      font-size: 0.6rem; letter-spacing: 3px; color: var(--cyan);
+      text-shadow: 0 0 8px var(--cyan);
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    #calWarn.hide { opacity: 0; }
+
+    /* ── Bottom-left: attitude indicator ────────────── */
+    #aiWrap { position: absolute; bottom: 20px; left: 20px; }
+
+    /* ── Bottom-right: WASD hint ─────────────────────── */
+    #hints {
+      position: absolute; bottom: 20px; right: 20px;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    .wasd-row {
+      display: flex; gap: 4px; justify-content: center;
+    }
+    kbd {
+      font-family: var(--font-display);
+      font-size: 0.62rem; font-weight: 600;
+      width: 30px; height: 30px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,212,255,0.07);
+      border: 1px solid rgba(0,212,255,0.35);
+      border-radius: 4px;
+      color: var(--cyan);
+      text-shadow: 0 0 8px var(--cyan);
+      box-shadow: 0 2px 0 rgba(0,212,255,0.2);
+    }
+    .wasd-label {
+      font-size: 0.48rem; letter-spacing: 4px;
+      color: rgba(0,212,255,0.35); margin-top: 2px;
+    }
+    #ai {
+      border-radius: 50%; display: block;
+      box-shadow: 0 0 0 1px rgba(0,212,255,0.25),
+                  0 0 20px rgba(0,212,255,0.15),
+                  0 4px 20px rgba(0,0,0,0.7);
+    }
+    .ai-label {
+      text-align: center;
+      font-size: 0.48rem; letter-spacing: 4px;
+      color: rgba(0,212,255,0.4);
+      margin-top: 5px;
+      text-shadow: 0 0 6px var(--cyan);
+    }
+
+    /* ── Timer display (center-top) ─────────────────── */
+    #timerDisp {
+      position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+      pointer-events: none;
+      opacity: 0;
+      white-space: nowrap;
+      transition: opacity 0.4s;
+    }
+    #timerDisp .timer-label {
+      font-family: var(--font-hud);
+      font-size: 0.42rem; letter-spacing: 5px;
+      color: rgba(0,212,255,0.45);
+      text-shadow: none;
+      margin-bottom: 1px;
+    }
+    #tvTimer {
+      font-family: var(--font-display);
+      font-size: 2rem; font-weight: 700; letter-spacing: 8px;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      width: 7ch; text-align: center;   /* fixed width = no jitter */
+      display: inline-block;
+      text-shadow: 0 0 4px var(--cyan), 0 0 16px rgba(0,212,255,0.6), 0 0 40px rgba(0,212,255,0.2);
+    }
+    #timerDisp.active { opacity: 1; }
+    #timerDisp.low #tvTimer {
+      color: var(--red);
+      text-shadow: 0 0 4px var(--red), 0 0 16px rgba(255,59,59,0.7), 0 0 40px rgba(255,59,59,0.3);
+      animation: timerFlash 0.6s ease-in-out infinite alternate;
+    }
+    #timerDisp.low { /* no border to update */ }
+    @keyframes timerFlash { from{opacity:1} to{opacity:0.6} }
+
+    /* boost HUD removed — visual feedback is speed lines only */
+
+    /* ── End screens ────────────────────────────────── */
+    #crashScreen, #winScreen, #loseScreen {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center;
+      z-index: 200;
+    }
+    .end-card {
+      background: rgba(2,8,22,0.97);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 44px 56px;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 22px;
+      min-width: 360px;
+      position: relative;
+    }
+    /* Corner brackets on end cards */
+    .end-card::before { content:''; position:absolute; top:0; left:0;
+      width:16px; height:16px; border:2px solid var(--cyan);
+      border-right:0; border-bottom:0; opacity:0.7; }
+    .end-card::after  { content:''; position:absolute; top:0; right:0;
+      width:16px; height:16px; border:2px solid var(--cyan);
+      border-left:0; border-bottom:0; opacity:0.7; }
+
+    #crashScreen h2 {
+      font-family: var(--font-display); font-weight: 900;
+      font-size: 2.2rem; letter-spacing: 6px; color: var(--red);
+      text-shadow: 0 0 30px var(--red), 0 0 60px rgba(255,59,59,0.3);
+    }
+    #winScreen h2 {
+      font-family: var(--font-display); font-weight: 900;
+      font-size: 1.8rem; letter-spacing: 5px; color: var(--green);
+      text-shadow: none;
+    }
+    #loseScreen h2 {
+      font-family: var(--font-display); font-weight: 900;
+      font-size: 2rem; letter-spacing: 5px; color: var(--amber);
+      text-shadow: 0 0 30px var(--amber), 0 0 60px rgba(255,210,0,0.25);
+    }
+
+    .score-board {
+      width: 100%;
+      border-top: 1px solid rgba(0,212,255,0.15);
+      border-bottom: 1px solid rgba(0,212,255,0.15);
+      padding: 14px 0;
+    }
+    .sb-row {
+      display: flex; justify-content: space-between;
+      font-size: 0.82rem; letter-spacing: 3px;
+      color: rgba(0,212,255,0.7);
+      padding: 6px 0;
+    }
+    .sb-penalty { color: rgba(255,100,100,0.85); }
+    .sb-total {
+      font-family: var(--font-display); font-weight: 700;
+      font-size: 1.1rem; color: #fff;
+      border-top: 1px solid rgba(0,212,255,0.18);
+      margin-top: 8px; padding-top: 12px;
+      text-shadow: 0 0 14px rgba(255,255,255,0.3);
+    }
+    .end-sub {
+      font-size: 0.72rem; letter-spacing: 4px;
+      color: rgba(0,212,255,0.4);
+    }
+    .screen-btn {
+      font-family: var(--font-display);
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 5px;
+      padding: 14px 52px;
+      background: rgba(0,212,255,0.08);
+      color: var(--cyan);
+      border: 1px solid rgba(0,212,255,0.4);
+      border-radius: 4px;
+      cursor: pointer; text-transform: uppercase;
+      text-shadow: 0 0 10px var(--cyan);
+      transition: background 0.18s, box-shadow 0.18s;
+    }
+    .screen-btn:hover {
+      background: rgba(0,212,255,0.18);
+      box-shadow: 0 0 20px rgba(0,212,255,0.3);
+    }
+    .btn-spacebar {
+      display: block;
+      font-size: 0.52em; letter-spacing: 5px;
+      opacity: 0.38; margin-top: 6px;
+    }
+
+    /* ── End screen layout: card + inline leaderboard side by side ── */
+    .end-row {
+      display: flex; gap: 20px; align-items: flex-start;
+      max-width: 90vw;
+    }
+    /* ── Score submit ─────────────────── */
+    .score-submit {
+      width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px;
+      border-top: 1px solid rgba(0,212,255,0.12); padding-top: 16px;
+    }
+    .pilot-row { display: flex; gap: 10px; width: 100%; }
+    .pilot-name-input {
+      flex: 1; background: rgba(0,212,255,0.06); border: 1px solid rgba(0,212,255,0.35);
+      border-radius: 4px; padding: 10px 14px;
+      font-family: var(--font-display); font-size: 0.7rem; letter-spacing: 4px;
+      color: var(--cyan); text-transform: uppercase; outline: none;
+    }
+    .pilot-name-input::placeholder { color: rgba(0,212,255,0.28); }
+    .pilot-name-input:focus { border-color: var(--cyan); box-shadow: 0 0 12px rgba(0,212,255,0.2); }
+    .btn-post {
+      font-family: var(--font-display); font-size: 0.65rem; font-weight: 700;
+      letter-spacing: 4px; padding: 10px 22px;
+      background: rgba(0,212,255,0.14); color: var(--cyan);
+      border: 1px solid rgba(0,212,255,0.5); border-radius: 4px; cursor: pointer;
+      text-shadow: 0 0 8px var(--cyan); white-space: nowrap; transition: background 0.15s;
+    }
+    .btn-post:hover { background: rgba(0,212,255,0.26); }
+    .btn-post:disabled { opacity: 0.35; cursor: default; }
+    .submit-feedback {
+      font-family: var(--font-hud); font-size: 0.72rem; letter-spacing: 3px;
+      color: var(--green); min-height: 1em; text-align: center;
+    }
+
+    /* ── Inline leaderboard panel ─────────────────────── */
+    .inline-lb {
+      background: rgba(2,8,22,0.97); border: 1px solid rgba(0,212,255,0.22);
+      border-radius: 6px; padding: 22px 26px;
+      display: flex; flex-direction: column; gap: 10px;
+      min-width: 300px; position: relative;
+    }
+    .inline-lb::before { content:''; position:absolute; top:0; left:0;
+      width:12px; height:12px; border:2px solid var(--amber); border-right:0; border-bottom:0; opacity:0.6; }
+    .inline-lb::after  { content:''; position:absolute; top:0; right:0;
+      width:12px; height:12px; border:2px solid var(--amber); border-left:0; border-bottom:0; opacity:0.6; }
+    .inline-lb-title {
+      font-family: var(--font-display); font-size: 0.85rem; font-weight: 700;
+      letter-spacing: 6px; color: var(--amber);
+      text-shadow: 0 0 14px rgba(255,210,0,0.35); text-align: center;
+    }
+    .inline-lb-date {
+      font-family: var(--font-hud); font-size: 0.62rem; letter-spacing: 4px;
+      color: rgba(0,212,255,0.35); text-align: center; margin-top: -6px;
+    }
+    .lb-table { width: 100%; border-collapse: collapse; }
+    .lb-table thead tr { border-bottom: 1px solid rgba(0,212,255,0.15); }
+    .lb-table th {
+      font-family: var(--font-hud); font-size: 0.58rem; letter-spacing: 3px;
+      color: rgba(0,212,255,0.38); padding: 3px 6px; text-align: left; font-weight: 400;
+    }
+    .lb-table th:last-child, .lb-table td:last-child { text-align: right; }
+    .lb-table td {
+      font-family: var(--font-hud); font-size: 0.75rem; letter-spacing: 2px;
+      color: rgba(0,212,255,0.72); padding: 7px 6px;
+      border-bottom: 1px solid rgba(0,212,255,0.06);
+    }
+    .lb-table tr.sb-me td { color: var(--amber) !important; }
+    .lb-table tr.sb-gold td { color: #fff; }
+    .lb-rank { color: rgba(0,212,255,0.32) !important; font-size: 0.62rem !important; }
+    .lb-empty {
+      text-align: center; font-family: var(--font-hud); font-size: 0.68rem;
+      letter-spacing: 3px; color: rgba(0,212,255,0.28); padding: 16px 0;
+    }
+
+    /* ── Phone calibration overlay ───────────────────── */
+    #calOverlay {
+      position: fixed; inset: 0;
+      background: rgba(2,6,18,0.76);
+      backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center;
+      z-index: 80; pointer-events: none;
+    }
+    #calOverlay.active { display: flex; }
+    .cal-card {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 20px; text-align: center;
+      max-width: 880px;
+    }
+    /* ── Calibration overlay typography: 2 sizes only ── */
+    /* SIZE A — small: badge, step counter, sub text, spacebar hint */
+    #calOvBadge {
+      font-family: var(--font-hud);
+      font-size: 0.8rem; letter-spacing: 5px;
+      color: var(--cyan);
+      background: rgba(0,212,255,0.06);
+      border: 1px solid rgba(0,212,255,0.28);
+      border-radius: 2px; padding: 7px 22px;
+      text-shadow: 0 0 10px var(--cyan);
+    }
+    #calOvStepNum {
+      opacity: 0.55;
+      margin-left: 10px;
+    }
+    #calOvStep { display: none; }
+    .cal-phone-scene {
+      perspective: 900px;
+      position: relative;
+      width: 360px; height: 290px;
+      display: flex; align-items: flex-start; justify-content: center;
+      padding-top: 8px;
+    }
+    /* Phone pivots from bottom-right corner — stays on table, tilts away cleanly */
+    #calPhoneSvg {
+      transition: transform 0.6s cubic-bezier(.4,0,.2,1);
+      transform-origin: right bottom;
+    }
+    /* Floor pinned to exactly phone-bottom (8px padding + 228px phone = 236px) */
+    #calFloorEl {
+      position: absolute;
+      top: 236px;
+      left: 0; right: 0;
+      display: none;
+    }
+    #calFloorEl svg { display: block; margin: 0 auto; }
+    /* SIZE B — large: the main instruction */
+    #calOvTitle {
+      font-family: var(--font-display); font-weight: 700;
+      font-size: 2.2rem; letter-spacing: 7px; color: #fff;
+      text-shadow: 0 0 30px rgba(0,212,255,0.55),
+                   0 0 60px rgba(0,212,255,0.2);
+    }
+    /* SIZE A again — sub instruction */
+    #calOvSub {
+      font-family: var(--font-hud);
+      font-size: 0.9rem; letter-spacing: 2px;
+      color: rgba(0,212,255,0.65);
+      max-width: 820px; line-height: 2;
+    }
+    .cal-spacebar-hint {
+      display: flex; align-items: center; gap: 14px;
+      font-family: var(--font-hud);
+      font-size: 1.6rem; letter-spacing: 3px;
+      color: rgba(0,212,255,0.4);
+      transition: opacity 0.3s;
+    }
+    .cal-spacebar-hint kbd {
+      font-family: var(--font-display);
+      font-size: 1.2rem; letter-spacing: 3px;
+      color: var(--cyan);
+      background: rgba(0,212,255,0.06);
+      border: 1px solid rgba(0,212,255,0.35);
+      border-radius: 3px; padding: 8px 24px;
+      text-shadow: 0 0 8px var(--cyan);
+      /* override the WASD square sizing */
+      width: auto; height: auto;
+      box-shadow: none;
+    }
+    #calOverlay.done .cal-phone-scene   { display: none; }
+    #calOverlay.done .cal-spacebar-hint { display: none; }
+    #calOverlay.done #calOvTitle {
+      color: var(--green);
+      text-shadow: 0 0 30px var(--green), 0 0 60px rgba(0,255,143,0.25);
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<!-- Crash screen -->
+<div id="crashScreen">
+  <div class="end-card">
+    <h2>YOU CRASHED</h2>
+    <button class="screen-btn" id="tryAgainBtn">TRY AGAIN<span class="btn-spacebar">SPACEBAR</span></button>
+  </div>
+</div>
+
+<!-- Win screen -->
+<div id="winScreen">
+  <div class="end-row">
+    <div class="end-card">
+      <h2>MISSION COMPLETE</h2>
+      <div class="score-board">
+        <div class="sb-row"><span id="winRingsLabel">5 RINGS</span><span id="winRingPts">50 PTS</span></div>
+        <div class="sb-row"><span>TIME BONUS</span><span id="winTimePts">+0 PTS</span></div>
+        <div class="sb-row sb-total"><span>TOTAL</span><span id="winTotal">50 PTS</span></div>
+      </div>
+      <div class="end-sub" id="winTimeDisp">TIME  0.0s</div>
+      <div class="score-submit">
+        <div class="pilot-row">
+          <input type="text" class="pilot-name-input" id="pilotNameInput" placeholder="ENTER CALLSIGN" maxlength="16" autocomplete="off" spellcheck="false">
+          <button class="btn-post" id="submitScoreBtn">POST</button>
+        </div>
+        <div class="submit-feedback" id="submitFeedback"></div>
+      </div>
+      <button class="screen-btn" id="winTryAgainBtn">FLY AGAIN<span class="btn-spacebar">SPACEBAR</span></button>
+    </div>
+    <div class="inline-lb" id="winLb">
+      <div class="inline-lb-title">LEADERBOARD</div>
+      <table class="lb-table">
+        <thead><tr><th>#</th><th>CALLSIGN</th><th>TIME</th><th>PTS</th></tr></thead>
+        <tbody id="winLbBody"></tbody>
+      </table>
+      <div class="lb-empty" id="winLbEmpty" style="display:none">NO SCORES YET TODAY</div>
+    </div>
+  </div>
+</div>
+
+<!-- Lose screen -->
+<div id="loseScreen">
+  <div class="end-row">
+    <div class="end-card">
+      <h2>TIME'S UP</h2>
+      <div class="score-board">
+        <div class="sb-row"><span id="loseRingsLabel">0 RINGS</span><span id="loseRingPts">0 PTS</span></div>
+        <div class="sb-row sb-penalty"><span id="loseMissedLabel">5 MISSED</span><span id="losePenalty">-25 PTS</span></div>
+        <div class="sb-row sb-total"><span>TOTAL</span><span id="loseTotal">0 PTS</span></div>
+      </div>
+      <div class="score-submit">
+        <div class="pilot-row">
+          <input type="text" class="pilot-name-input" id="loseNameInput" placeholder="ENTER CALLSIGN" maxlength="16" autocomplete="off" spellcheck="false">
+          <button class="btn-post" id="submitLoseBtn">POST</button>
+        </div>
+        <div class="submit-feedback" id="submitLoseFeedback"></div>
+      </div>
+      <button class="screen-btn" id="loseTryAgainBtn">TRY AGAIN<span class="btn-spacebar">SPACEBAR</span></button>
+    </div>
+    <div class="inline-lb" id="loseLb">
+      <div class="inline-lb-title">LEADERBOARD</div>
+      <table class="lb-table">
+        <thead><tr><th>#</th><th>CALLSIGN</th><th>TIME</th><th>PTS</th></tr></thead>
+        <tbody id="loseLbBody"></tbody>
+      </table>
+      <div class="lb-empty" id="loseLbEmpty" style="display:none">NO SCORES YET TODAY</div>
+    </div>
+  </div>
+</div>
+
+<div id="hud">
+
+  <!-- Telemetry top-left -->
+  <div id="tele">
+    <div class="tr">
+      <span class="tl">SPD</span>
+      <span class="tv" id="tvSpd">0</span>
+      <span class="tu">KTS</span>
+    </div>
+    <div class="tr">
+      <span class="tl">ALT</span>
+      <span class="tv" id="tvAlt">30</span>
+      <span class="tu">M</span>
+    </div>
+    <div class="tr">
+      <span class="tl">THR</span>
+      <div id="tbar-wrap"><div id="tbar"></div></div>
+    </div>
+    <div class="tr">
+      <span class="tl">HDG</span>
+      <span class="tv" id="tvHdg">000</span>
+      <span class="tu">°</span>
+    </div>
+  </div>
+
+  <!-- Timer (center-top, appears on liftoff) -->
+  <div id="timerDisp">
+    <span class="timer-label">TIME</span>
+    <span id="tvTimer">60.00</span>
+  </div>
+
+  <!-- QR connect card -->
+  <div id="qcard">
+    <h3>&#9654; SCAN TO FLY</h3>
+    <img id="qrImg" src="" alt="Generating QR…">
+    <div id="codeDisp">------</div>
+    <div class="qhint">Scan QR with phone camera,<br>or open phone.html?code=XXXXXX</div>
+  </div>
+
+  <!-- Phone connected badge -->
+  <div id="pbadge">
+    <div class="pdot"></div>
+    <span>PHONE LINKED</span>
+  </div>
+
+  <!-- Ring counter top-right (shown during play) -->
+  <div id="ringCount">
+    <span class="tl">RINGS</span>
+    <span class="rc-val"><span id="tvRings">0</span><span class="rc-total"> / 5</span></span>
+  </div>
+
+  <!-- Center warnings -->
+  <div id="warn">⚠ CONNECT PHONE TO FLY</div>
+  <div id="calWarn" class="hide">PRESS <kbd>R</kbd> TO RECALIBRATE PHONE</div>
+
+  <!-- Calibration overlay (spacebar-driven, shown when phone connects) -->
+  <div id="calOverlay">
+    <div class="cal-card">
+      <div id="calOvBadge">CALIBRATING PHONE<span id="calOvStepNum"></span></div>
+      <div id="calOvStep"></div>
+
+      <!-- 3-D phone illustration — CSS transform changes per step -->
+      <div class="cal-phone-scene">
+        <svg id="calPhoneSvg" xmlns="http://www.w3.org/2000/svg"
+             width="132" height="228" viewBox="0 0 88 152">
+          <!-- body -->
+          <rect x="4" y="4" width="80" height="144" rx="13"
+                fill="#050d1e" stroke="#00d4ff" stroke-width="2"/>
+          <!-- screen -->
+          <rect x="12" y="22" width="64" height="98" rx="3" fill="#0a1830"/>
+          <!-- screen glow -->
+          <rect x="12" y="22" width="64" height="98" rx="3"
+                fill="none" stroke="rgba(0,212,255,0.25)" stroke-width="1"/>
+          <!-- home bar -->
+          <rect x="30" y="132" width="28" height="4" rx="2" fill="rgba(0,212,255,0.4)"/>
+          <!-- notch -->
+          <rect x="32" y="10" width="24" height="6" rx="3" fill="#00d4ff" opacity="0.6"/>
+          <!-- airplane on screen -->
+          <text x="44" y="76" text-anchor="middle" font-size="26"
+                fill="#00d4ff" opacity="0.9">✈</text>
+          <!-- screen center-line cross-hair -->
+          <line x1="44" y1="30" x2="44" y2="44" stroke="rgba(0,212,255,0.2)" stroke-width="1"/>
+          <line x1="36" y1="71" x2="52" y2="71" stroke="rgba(0,212,255,0.2)" stroke-width="1"/>
+        </svg>
+
+        <!-- Floor: separate element — stays horizontal regardless of phone tilt -->
+        <div id="calFloorEl">
+          <svg xmlns="http://www.w3.org/2000/svg" width="330" height="36" viewBox="0 0 220 24">
+            <!-- surface edge -->
+            <rect x="0" y="0" width="220" height="3" rx="1.5" fill="#00d4ff" opacity="0.65"/>
+            <!-- surface fill -->
+            <rect x="0" y="3" width="220" height="15" fill="rgba(0,212,255,0.06)"/>
+            <!-- left leg -->
+            <rect x="14" y="6" width="4" height="14" rx="1" fill="#00d4ff" opacity="0.25"/>
+            <!-- right leg -->
+            <rect x="202" y="6" width="4" height="14" rx="1" fill="#00d4ff" opacity="0.25"/>
+            <!-- label -->
+            <text x="110" y="16" text-anchor="middle" font-size="6.5"
+                  fill="#00d4ff" opacity="0.55" font-family="monospace" letter-spacing="2">FLAT SURFACE</text>
+          </svg>
+        </div>
+      </div>
+
+      <div id="calOvTitle">HOLD PHONE LEVEL</div>
+      <div id="calOvSub">Hold the phone upright, screen facing you, in your comfortable flying position</div>
+      <div class="cal-spacebar-hint">
+        <span>PRESS</span><kbd>SPACEBAR</kbd><span>TO CONFIRM</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Attitude indicator bottom-left -->
+  <div id="aiWrap">
+    <canvas id="ai" width="130" height="130"></canvas>
+    <div class="ai-label">ATTITUDE</div>
+  </div>
+
+  <!-- WASD hint bottom-right -->
+  <div id="hints">
+    <div class="wasd-row"><kbd>W</kbd></div>
+    <div class="wasd-row"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+    <div class="wasd-label">MOVE</div>
+  </div>
+
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+/* ═══════════════════════════════════════════════════════════
+   THREE.JS SETUP
+═══════════════════════════════════════════════════════════ */
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.toneMapping        = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace   = THREE.SRGBColorSpace;
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 300, 975);
+
+const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.5, 1500);
+camera.position.set(0, 5, 229);  // behind the plane at runway start
+
+/* ── Lights ── */
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+const sun = new THREE.DirectionalLight(0xfff5dd, 1.0);
+sun.position.set(100, 220, 120);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.far = 600;
+sun.shadow.camera.left = sun.shadow.camera.bottom = -150;
+sun.shadow.camera.right = sun.shadow.camera.top = 150;
+scene.add(sun);
+
+/* ── Ground ── */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(4000, 4000),
+  new THREE.MeshLambertMaterial({ color: 0x4a8a30 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(4000, 200, 0x3a7820, 0x3a7820);
+grid.position.y = 0.15;
+scene.add(grid);
+
+/* ── Runway ── */
+const runway = new THREE.Mesh(
+  new THREE.PlaneGeometry(14, 250),
+  new THREE.MeshLambertMaterial({ color: 0x3a3a4a })
+);
+runway.rotation.x = -Math.PI / 2;
+runway.position.set(0, 0.08, 110);
+scene.add(runway);
+
+// Runway centerline dashes
+for (let i = -100; i < 100; i += 20) {
+  const dash = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.8, 8),
+    new THREE.MeshLambertMaterial({ color: 0xffffff })
+  );
+  dash.rotation.x = -Math.PI / 2;
+  dash.position.set(0, 0.1, 110 + i);
+  scene.add(dash);
+}
+
+/* ── Buildings / scenery ── */
+const rng = (a, b) => a + Math.random() * (b - a);
+const matA = new THREE.MeshLambertMaterial({ color: 0x888888 });
+const matB = new THREE.MeshLambertMaterial({ color: 0x667788 });
+const matC = new THREE.MeshLambertMaterial({ color: 0xaa9977 });
+const mats = [matA, matB, matC];
+
+// Runway corridor: x ∈ [-22, 22], z ∈ [-20, 240] — keep clear of buildings/trees
+const onRunway = (x, z) => Math.abs(x) < 22 && z > -20 && z < 240;
+
+// Collision objects — each { x, z, radius, top }
+const colliders = [];
+
+for (let i = 0; i < 150; i++) {
+  const angle = Math.random() * Math.PI * 2;
+  const dist  = rng(80, 700);
+  const x = Math.cos(angle) * dist;
+  const z = Math.sin(angle) * dist;
+  if (onRunway(x, z)) continue;           // keep runway clear
+  const w = rng(4, 18), h = rng(5, 40), d = rng(4, 18);
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    mats[Math.floor(Math.random() * 3)]
+  );
+  mesh.position.set(x, h / 2, z);
+  mesh.castShadow = true;
+  scene.add(mesh);
+  colliders.push({ x, z, radius: Math.max(w, d) / 2, top: h });
+}
+
+// Some trees (cones on sticks)
+for (let i = 0; i < 200; i++) {
+  const angle = Math.random() * Math.PI * 2;
+  const dist  = rng(50, 500);
+  const x = Math.cos(angle) * dist;
+  const z = Math.sin(angle) * dist;
+  if (onRunway(x, z)) continue;           // keep runway clear
+  const h = rng(4, 9);
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.2, 0.25, h * 0.5, 6),
+    new THREE.MeshLambertMaterial({ color: 0x5a3a20 })
+  );
+  trunk.position.set(x, h * 0.25, z);
+  scene.add(trunk);
+  const crown = new THREE.Mesh(
+    new THREE.ConeGeometry(h * 0.35, h * 0.8, 7),
+    new THREE.MeshLambertMaterial({ color: 0x2a6a20 })
+  );
+  crown.position.set(x, h * 0.6 + h * 0.4, z);
+  scene.add(crown);
+  // trees are passable — no collider
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COLLECTIBLE RINGS
+═══════════════════════════════════════════════════════════ */
+
+const rings        = [];
+const ringSpinners = [];   // { r1, r2 } — null until GLB loads
+const RING_SPIN    = 1.4;  // rad/s
+
+[
+  [   0,  55, -350 ],
+  [ -320,  70,  -80 ],
+  [  280,  45, -180 ],
+  [ -150,  90, -520 ],
+  [  380,  60,  120 ],
+].forEach(([x, y, z]) => {
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.userData.collected = false;
+
+  // Visible gold torus fallback — stays if GLB fails, replaced on success
+  const fallback = new THREE.Mesh(
+    new THREE.TorusGeometry(14, 1.0, 12, 40),
+    new THREE.MeshLambertMaterial({ color: 0xffd700, emissive: 0xaa7700 })
+  );
+  fallback.name = '_fallback';
+  group.add(fallback);
+
+  // Point light so the ring glows onto surrounding geometry
+  const ringLight = new THREE.PointLight(0xffd700, 2.2, 60);
+  group.add(ringLight);
+  group.userData.light = ringLight;
+
+  scene.add(group);
+  rings.push(group);
+  ringSpinners.push({ r1: null, r2: null });
+});
+
+new GLTFLoader().load('/Ring.glb', (gltf) => {
+  console.log('[Ring.glb] loaded, children:', gltf.scene.children.length);
+
+  // Safe scale — guard against empty bounding box
+  const tmpBox  = new THREE.Box3().setFromObject(gltf.scene);
+  const tmpSize = new THREE.Vector3();
+  tmpBox.getSize(tmpSize);
+  const maxDim   = Math.max(tmpSize.x, tmpSize.y, tmpSize.z);
+  const ringScale = (isFinite(maxDim) && maxDim > 0) ? 28 / maxDim : 1;
+  console.log('[Ring.glb] size:', tmpSize, '→ scale:', ringScale.toFixed(3));
+
+  rings.forEach((group, i) => {
+    // Remove fallback placeholder
+    const fb = group.getObjectByName('_fallback');
+    if (fb) group.remove(fb);
+
+    const model = gltf.scene.clone(true);
+    model.scale.setScalar(ringScale);
+
+    // Centre on group origin
+    const b = new THREE.Box3().setFromObject(model);
+    const c = new THREE.Vector3();
+    b.getCenter(c);
+    model.position.sub(c);
+
+    // Clone materials + stamp gold so each ring can glow independently
+    model.traverse(child => {
+      if (!child.isMesh) return;
+      child.castShadow = true;
+      const applyGold = m => {
+        const c = m.clone();
+        c.color.setHex(0xffd700);
+        if ('emissive'         in c) c.emissive.setHex(0xaa6600);
+        if ('emissiveIntensity' in c) c.emissiveIntensity = 1.2;
+        if ('metalness'        in c) { c.metalness = 0.75; c.roughness = 0.25; }
+        return c;
+      };
+      if (Array.isArray(child.material))
+        child.material = child.material.map(applyGold);
+      else if (child.material)
+        child.material = applyGold(child.material);
+    });
+
+    group.add(model);
+    ringSpinners[i] = {
+      r1: model.getObjectByName('Ring_1'),
+      r2: model.getObjectByName('Ring_2'),
+    };
+    console.log(`[Ring.glb] ring ${i} — Ring_1:`, !!ringSpinners[i].r1, ' Ring_2:', !!ringSpinners[i].r2);
+  });
+}, undefined, (err) => {
+  console.error('[Ring.glb] failed to load:', err);
+  // fallback tori remain visible — game still playable
+});
+
+/* ── Ring decoration: 5 gold star sprites per ring ── */
+(function buildRingStars() {
+  // Draw a crisp 5-pointed star on a canvas → sprite texture
+  const sc = document.createElement('canvas');
+  sc.width = sc.height = 64;
+  const sCtx = sc.getContext('2d');
+  const c = 32, ro = 28, ri = 11;
+  sCtx.fillStyle = '#ffffff';          // white — SpriteMaterial.color does the gold tinting
+  sCtx.shadowColor = '#ffffff';
+  sCtx.shadowBlur  = 10;
+  sCtx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = (i * Math.PI / 5) - Math.PI / 2;
+    const r = i % 2 === 0 ? ro : ri;
+    i === 0 ? sCtx.moveTo(c + r*Math.cos(a), c + r*Math.sin(a))
+            : sCtx.lineTo(c + r*Math.cos(a), c + r*Math.sin(a));
+  }
+  sCtx.closePath();
+  sCtx.fill();
+
+  const starTex = new THREE.CanvasTexture(sc);
+  const starMat = new THREE.SpriteMaterial({
+    map: starTex, color: 0xffd700, sizeAttenuation: true,
+  });
+
+  rings.forEach(group => {
+    for (let k = 0; k < 5; k++) {
+      const angle = (k / 5) * Math.PI * 2;
+      const sp = new THREE.Sprite(starMat.clone());
+      sp.position.set(Math.cos(angle) * 17, Math.sin(angle) * 17, 0);
+      sp.scale.setScalar(5.5);
+      sp.name = '_ringStar';
+      group.add(sp);
+    }
+  });
+})();
+
+/* ═══════════════════════════════════════════════════════════
+   GOLD STAR PARTICLES
+═══════════════════════════════════════════════════════════ */
+
+const starPool       = [];     // { wrapper, mixer, action, active, lifeTimer, duration }
+const starPending    = [];     // { delay } — queued spawns waiting their stagger delay
+const STARS_PER_RING = 10;
+const STAR_STAGGER   = 0.03;  // base stagger — heavy random jitter lets them overlap freely
+const STAR_SPREAD_R  = 2.8;   // random spread radius (world units)
+
+/* Schedule 6 stars to pop out one-by-one from the plane's tail */
+function scheduleStarBurst() {
+  for (let i = 0; i < STARS_PER_RING; i++) {
+    // Slight jitter (±15 ms) so siblings don't land on the same frame
+    // Fully random delay 0–0.25s so stars genuinely overlap and burst together
+    starPending.push({ delay: i * STAR_STAGGER + Math.random() * 0.22 });
+  }
+}
+
+/* Grab an inactive slot from the pool and place/animate it */
+function _spawnOneStar() {
+  const slot = starPool.find(s => !s.active);
+  if (!slot) return;  // all slots in use — skip rather than glitch
+
+  // Spawn just behind the plane with a random spread cone
+  const rx = (Math.random() - 0.5) * STAR_SPREAD_R * 2;
+  const ry = (Math.random() - 0.5) * STAR_SPREAD_R;
+  const rz = (Math.random() - 0.5) * STAR_SPREAD_R * 2;
+  slot.wrapper.position.set(
+    airplane.position.x - _forward.x * 3 + rx,
+    airplane.position.y - _forward.y * 3 + ry,
+    airplane.position.z - _forward.z * 3 + rz
+  );
+  // Random facing so every star looks different
+  slot.wrapper.rotation.set(
+    Math.random() * Math.PI * 2,
+    Math.random() * Math.PI * 2,
+    Math.random() * Math.PI * 2
+  );
+  // ±30% size variation so no two stars look identical
+  if (slot.clone) slot.clone.scale.setScalar(slot.baseScale * (0.7 + Math.random() * 0.6));
+  slot.wrapper.visible = true;
+  slot.lifeTimer = 0;
+  slot.active    = true;
+
+  if (slot.action) {
+    slot.action.reset();
+    slot.action.play();
+  }
+}
+
+new GLTFLoader().load('/Gold Star.glb', (gltf) => {
+  // Auto-scale: fit the star to ~4 world units across
+  const tmpBox  = new THREE.Box3().setFromObject(gltf.scene);
+  const tmpSize = new THREE.Vector3();
+  tmpBox.getSize(tmpSize);
+  const maxDim   = Math.max(tmpSize.x, tmpSize.y, tmpSize.z);
+  const starScale = (isFinite(maxDim) && maxDim > 0) ? 1.2 / maxDim : 0.6; // smaller particles
+
+  const POOL_SIZE = STARS_PER_RING * 2; // 12 — enough for two near-simultaneous rings
+
+  for (let i = 0; i < POOL_SIZE; i++) {
+    // Wrapper sits in world space; inner clone carries the scale & animation
+    const wrapper = new THREE.Group();
+    wrapper.visible = false;
+    scene.add(wrapper);
+
+    const clone = gltf.scene.clone(true);
+    clone.scale.setScalar(starScale);
+
+    // Paint every mesh gold so the star matches the ring colour
+    clone.traverse(child => {
+      if (!child.isMesh) return;
+      const applyGold = m => {
+        const mc = m.clone();
+        mc.color.setHex(0xffd700);
+        if ('emissive'          in mc) mc.emissive.setHex(0xcc8800);
+        if ('emissiveIntensity' in mc) mc.emissiveIntensity = 1.8;
+        if ('metalness'         in mc) { mc.metalness = 0.85; mc.roughness = 0.15; }
+        return mc;
+      };
+      child.material = Array.isArray(child.material)
+        ? child.material.map(applyGold)
+        : applyGold(child.material);
+    });
+
+    wrapper.add(clone);
+
+    // Per-instance mixer so each star runs its own animation timeline
+    const mixer = new THREE.AnimationMixer(clone);
+    let action   = null;
+    let duration = 0.375; // safe fallback (half of 0.75)
+
+    if (gltf.animations.length > 0) {
+      const clip = gltf.animations[0];
+      action = mixer.clipAction(clip);
+      action.loop              = THREE.LoopOnce;
+      action.clampWhenFinished = true; // holds at scale 0 after shrink finishes
+      action.timeScale         = 2.0;  // play at 2× speed → animation finishes in half the time
+      duration = clip.duration / 2;    // effective lifetime matches the faster playback
+    }
+
+    starPool.push({ wrapper, clone, baseScale: starScale, mixer, action, active: false, lifeTimer: 0, duration });
+  }
+
+  console.log('[Gold Star.glb] loaded — pool:', POOL_SIZE, 'stars × scale:', starScale.toFixed(3),
+              '— effective duration:', (gltf.animations[0]?.duration / 2).toFixed(3) ?? 'n/a', 's');
+
+  // Pre-warm: make every star briefly visible so Three.js uploads geometry buffers
+  // and compiles shaders NOW (during startup), not on the first ring crossing.
+  starPool.forEach(slot => { slot.wrapper.visible = true; });
+  renderer.render(scene, camera);
+  starPool.forEach(slot => { slot.wrapper.visible = false; });
+}, undefined, (err) => {
+  console.warn('[Gold Star.glb] failed to load:', err);
+  // stars simply won't appear — rest of game unaffected
+});
+
+/* ═══════════════════════════════════════════════════════════
+   SPEED-BOOST CLOUDS  (10 total)
+═══════════════════════════════════════════════════════════ */
+
+const CLOUD_BOOST_MULT = 2.0;   // forward speed multiplier
+const CLOUD_BOOST_DUR  = 1.5;   // seconds boost lasts (last 0.5s = speed fadeout)
+const CLOUD_COLLECT_R  = 18;    // detection sphere radius
+const CLOUD_COOLDOWN   = 9.0;   // seconds before a cloud respawns
+
+let boostActive      = false;
+let boostTimer       = 0;
+let boostMult        = 1;
+let cloudBoostActive = false;  // tracks cloud-only boost — drives streak lines
+
+// Shared semi-transparent white material for all cloud blobs
+const _cloudMat = new THREE.MeshLambertMaterial({
+  color: 0xf0f4ff, transparent: true, opacity: 0.70,
+});
+
+const clouds = [];
+
+[
+  [   80,  62,  -90 ],
+  [ -110,  78, -160 ],
+  [  160,  52,  -55 ],
+  [  -75,  68,  210 ],
+  [  210,  88, -310 ],
+  [ -210,  48, -195 ],
+  [   55,  70, -410 ],
+  [  310,  74,   55 ],
+  [ -290,  58,  -45 ],
+  [  105, 100, -490 ],
+].forEach(([x, y, z]) => {
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.userData.active   = true;
+  group.userData.cooldown = 0;
+
+  // 5 overlapping blobs for a fluffy look
+  [
+    [  0,   0,  0, 8.0 ],
+    [  8,  -2,  1, 6.5 ],
+    [ -8,  -1, -1, 6.5 ],
+    [  3,   4,  0, 5.5 ],
+    [ -3,   3,  2, 5.0 ],
+  ].forEach(([bx, by, bz, r]) => {
+    const blob = new THREE.Mesh(new THREE.SphereGeometry(r, 7, 6), _cloudMat);
+    blob.position.set(bx, by, bz);
+    group.add(blob);
+  });
+
+  scene.add(group);
+  clouds.push(group);
+});
+
+/* ── Daily seeded RNG — same layout for every player on the same calendar day ── */
+function _mulberry32(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s += 0x6D2B79F5;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t ^= t + Math.imul(t ^ t >>> 7, 61 | t);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const TODAY_SEED = (() => {
+  const d = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  return d.split('').reduce((h, c) => Math.imul(31, h) + c.charCodeAt(0) | 0, 0);
+})();
+let _dailyRng = _mulberry32(TODAY_SEED);
+function resetDailyRng() { _dailyRng = _mulberry32(TODAY_SEED); }
+function drng(a, b) { return a + _dailyRng() * (b - a); }
+
+/* ── Randomise positions — called on init AND every Try Again ── */
+function randomiseRings() {
+  resetDailyRng();  // same positions every run on the same day
+  const sector = (Math.PI * 2) / rings.length;
+  rings.forEach((ring, i) => {
+    const angle = i * sector + (_dailyRng() - 0.5) * sector * 0.8;
+    const dist  = drng(130, 520);
+    ring.position.set(
+      Math.cos(angle) * dist,
+      drng(28, 160),
+      Math.sin(angle) * dist
+    );
+    ring.rotation.y = _dailyRng() * Math.PI * 2;
+  });
+}
+
+function randomiseClouds() {
+  // continues consuming the daily RNG after rings, so cloud layout is also fixed
+  const sector = (Math.PI * 2) / clouds.length;
+  clouds.forEach((cloud, i) => {
+    const angle = i * sector + (_dailyRng() - 0.5) * sector * 0.7;
+    const dist  = drng(80, 450);
+    cloud.position.set(
+      Math.cos(angle) * dist,
+      drng(38, 175),
+      Math.sin(angle) * dist
+    );
+    cloud.userData.active   = true;
+    cloud.userData.cooldown = 0;
+    cloud.visible = true;
+  });
+}
+
+// Set initial positions on first load
+randomiseRings();
+randomiseClouds();
+
+/* ═══════════════════════════════════════════════════════════
+   AIRPLANE MODEL  (GLTF)
+═══════════════════════════════════════════════════════════ */
+
+// Root group — physics rotates/moves this directly
+const airplane = new THREE.Group();
+airplane.position.set(0, 1.5, 215);
+scene.add(airplane);
+
+/* ── Speed-boost streak lines (simple cylinders, built synchronously at startup) ── */
+const _speedLineGroup = new THREE.Group();
+airplane.add(_speedLineGroup);
+const _speedLineSlots = [];   // { mesh, baseZ, phase }
+const _speedLineMat   = new THREE.MeshBasicMaterial({ color: 0xaaeeff, transparent: true, depthWrite: false, opacity: 0 });
+const SPEED_LINE_N    = 10;
+const STREAK_TRAVEL   = 14;
+const STREAK_SPEED    = 65;
+{
+  for (let i = 0; i < SPEED_LINE_N; i++) {
+    const angle  = (i / SPEED_LINE_N) * Math.PI * 2;
+    const radius = 0.7 + Math.random() * 1.5;
+    const len    = 3 + Math.random() * 5;
+    const geo    = new THREE.CylinderGeometry(0.015, 0.04, len, 3);
+    geo.rotateX(Math.PI / 2);
+    const mesh  = new THREE.Mesh(geo, _speedLineMat);
+    const baseZ = len * 0.5 + 1.5 + Math.random() * 2;
+    mesh.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, baseZ);
+    _speedLineGroup.add(mesh);
+    _speedLineSlots.push({ mesh, baseZ, phase: (i / SPEED_LINE_N) * STREAK_TRAVEL });
+  }
+}
+
+// Tiny wireframe placeholder so the camera has something to track while loading
+const _placeholder = new THREE.Mesh(
+  new THREE.BoxGeometry(4, 1, 6),
+  new THREE.MeshBasicMaterial({ color: 0x3d8bff, wireframe: true })
+);
+airplane.add(_placeholder);
+
+new GLTFLoader().load('/AP1.glb', (gltf) => {
+  airplane.remove(_placeholder);
+
+  const model = gltf.scene;
+
+  // Auto-scale: fit longest axis to ~8 units (roughly the old hand-built plane)
+  const box  = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const scale = 8 / Math.max(size.x, size.y, size.z);
+  model.scale.setScalar(scale);
+
+  // Flip to face -Z (nose forward)
+  model.rotation.y = Math.PI;
+
+  // Center the model on the group origin (vertical + forward)
+  box.setFromObject(model);   // recompute after scale
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  model.position.sub(center); // center horizontally & vertically
+  model.position.y -= box.min.y * 0; // keep Y at 0; tweak if wheels float
+
+  // Shadows
+  model.traverse(child => {
+    if (child.isMesh) { child.castShadow = true; child.receiveShadow = false; }
+  });
+
+  airplane.add(model);
+  propeller = model.getObjectByName('Helix');
+});
+
+/* ═══════════════════════════════════════════════════════════
+   FLIGHT STATE
+═══════════════════════════════════════════════════════════ */
+
+let throttle  = 0;     // 0..1
+let speed     = 0;     // m/s, airspeed along heading
+let heading   = 0;     // degrees, clockwise from North (-Z)
+let propeller = null;  // set after GLB loads
+let propSpeed = 0;     // actual spin rate — fades in/out smoothly
+let crashed   = false;
+let gameEnded = false; // true for crash / win / lose — freezes flight
+
+// Timer
+let timerStarted = false;
+let timerActive  = false;
+let timeElapsed  = 0;      // seconds elapsed since liftoff
+const TIME_LIMIT = 60;
+
+function triggerCrash() {
+  if (gameEnded) return;
+  gameEnded = true;
+  crashed   = true;
+  document.getElementById('crashScreen').style.display = 'flex';
+}
+
+function triggerWin() {
+  if (gameEnded) return;
+  gameEnded = true;
+  const timeLeft  = Math.max(0, TIME_LIMIT - timeElapsed);
+  const ringPts   = rings.length * 10;                    // 5 × 10 = 50
+  const timeBonus = Math.floor(timeLeft) * 2;              // every 1s left = +2 pts
+  const total     = ringPts + timeBonus;
+  document.getElementById('winRingPts').textContent  = ringPts   + ' PTS';
+  document.getElementById('winTimePts').textContent  = '+' + timeBonus + ' PTS';
+  document.getElementById('winTotal').textContent    = total     + ' PTS';
+  document.getElementById('winTimeDisp').textContent = 'TIME  ' + timeElapsed.toFixed(3) + 's';
+  _lastScore = { rings: rings.length, time: timeElapsed, total };
+  document.getElementById('winScreen').style.display = 'flex';
+  loadLb('winLbBody', 'winLbDate', 'winLbEmpty');
+}
+
+function triggerLose() {
+  if (gameEnded) return;
+  gameEnded = true;
+  const collected = rings.filter(r => r.userData.collected).length;
+  const missed    = rings.length - collected;
+  const ringPts   = collected * 10;
+  const penalty   = missed * 5;
+  const total     = Math.max(0, ringPts - penalty);
+  document.getElementById('loseRingsLabel').textContent  = collected + ' RING' + (collected !== 1 ? 'S' : '');
+  document.getElementById('loseRingPts').textContent     = ringPts + ' PTS';
+  document.getElementById('loseMissedLabel').textContent = missed + ' MISSED';
+  document.getElementById('losePenalty').textContent     = '-' + penalty + ' PTS';
+  document.getElementById('loseTotal').textContent       = total + ' PTS';
+  _lastScore = { rings: collected, time: null, total };
+  document.getElementById('loseScreen').style.display = 'flex';
+  loadLb('loseLbBody', 'loseLbDate', 'loseLbEmpty');
+}
+
+/* ── Scoreboard ──────────────────────────────────────── */
+let _lastScore  = null;   // { rings, time, total }
+let _myCallsign = '';     // for highlighting after post
+
+async function loadLb(bodyId, dateId, emptyId) {
+  const tbody  = document.getElementById(bodyId);
+  const dateEl = document.getElementById(dateId);
+  const emptyEl = document.getElementById(emptyId);
+  tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;opacity:0.35;letter-spacing:3px;font-size:0.65rem">LOADING...</td></tr>`;
+  emptyEl.style.display = 'none';
+  try {
+    const res  = await fetch('/api/scores');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    tbody.innerHTML = '';
+    if (!data.scores.length) {
+      emptyEl.style.display = 'block';
+    } else {
+      data.scores.slice(0, 12).forEach((s, idx) => {
+        const tr = document.createElement('tr');
+        if (idx === 0) tr.classList.add('sb-gold');
+        if (_myCallsign && s.name === _myCallsign) tr.classList.add('sb-me');
+        tr.innerHTML = `<td class="lb-rank">${idx + 1}</td><td>${s.name}</td><td>${s.time != null ? s.time.toFixed(3) + 's' : '—'}</td><td>${s.total}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--red);font-size:0.65rem">${e.message}</td></tr>`;
+  }
+}
+
+async function submitScore(nameInputId, feedbackId, btnId, lbBodyId, lbDateId, lbEmptyId) {
+  if (!_lastScore) return;
+  const input  = document.getElementById(nameInputId);
+  const feedEl = document.getElementById(feedbackId);
+  const btn    = document.getElementById(btnId);
+  const trimmed = (input?.value || '').trim().replace(/[^a-zA-Z0-9 _\-]/g, '').toUpperCase();
+  if (!trimmed) { feedEl.textContent = 'ENTER A CALLSIGN'; feedEl.style.color = 'var(--amber)'; return; }
+  btn.disabled = true;
+  feedEl.textContent = 'POSTING...';
+  feedEl.style.color = 'rgba(0,212,255,0.5)';
+  try {
+    const res  = await fetch('/api/scores', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: trimmed, ..._lastScore }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data.ok) {
+      _myCallsign = data.entry.name;
+      feedEl.textContent = `✓ RANK #${data.rank}`;
+      feedEl.style.color = 'var(--green)';
+      // Refresh the leaderboard to show the new entry
+      loadLb(lbBodyId, lbDateId, lbEmptyId);
+    } else throw new Error('rejected');
+  } catch (e) {
+    feedEl.textContent = e.message.includes('404') ? 'RESTART SERVER' : 'FAILED — ' + e.message;
+    feedEl.style.color = 'var(--red)';
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('submitScoreBtn').addEventListener('click', () =>
+  submitScore('pilotNameInput', 'submitFeedback', 'submitScoreBtn', 'winLbBody', 'winLbDate', 'winLbEmpty'));
+document.getElementById('submitLoseBtn').addEventListener('click', () =>
+  submitScore('loseNameInput', 'submitLoseFeedback', 'submitLoseBtn', 'loseLbBody', 'loseLbDate', 'loseLbEmpty'));
+
+function resetSubmitUI() {
+  ['pilotNameInput','loseNameInput'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['submitFeedback','submitLoseFeedback'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
+  ['submitScoreBtn','submitLoseBtn'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+  _lastScore = null; _myCallsign = '';
+}
+
+function resetGame() {
+  gameEnded    = false;
+  crashed      = false;
+  timerStarted = false;
+  timerActive  = false;
+  timeElapsed  = 0;
+  // Reset plane
+  airplane.position.set(0, 1.5, 215);
+  heading   = 0;
+  speed     = 0;
+  throttle  = 0;
+  ctrlPitch = 0;
+  ctrlRoll  = 0;
+  propSpeed = 0;
+  // Snap camera + prev-position tracker
+  camera.position.set(0, 6, 229);
+  _prevPlanePos.set(0, 1.5, 215);
+  // Reset rings — restore gold glow + ring stars
+  rings.forEach(ring => {
+    ring.userData.collected = false;
+    ring.traverse(child => {
+      if (child.name === '_ringStar') { child.visible = true; return; }
+      if (!child.isMesh) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach(m => {
+        if (m && m.emissive) {
+          m.emissive.setHex(0xaa6600);
+          if ('emissiveIntensity' in m) m.emissiveIntensity = 1.0;
+        }
+      });
+    });
+    if (ring.userData.light) {
+      ring.userData.light.color.setHex(0xffd700);
+      ring.userData.light.intensity = 2.2;
+    }
+  });
+  // Randomise new ring + cloud positions, reset cloud states
+  randomiseRings();
+  randomiseClouds();
+  boostActive      = false;
+  cloudBoostActive = false;
+  boostTimer       = 0;
+  boostMult        = 1;
+  _speedLineMat.opacity = 0;
+  // Reset ring counter
+  const tvRingsEl = document.getElementById('tvRings');
+  if (tvRingsEl) tvRingsEl.textContent = '0';
+  document.getElementById('ringCount').classList.remove('active');
+  // Clear any in-flight star particles
+  starPending.length = 0;
+  starPool.forEach(slot => { slot.active = false; slot.wrapper.visible = false; });
+
+  // Reset timer display
+  const td = document.getElementById('timerDisp');
+  td.classList.remove('active', 'low');
+  document.getElementById('tvTimer').textContent = '60.00';
+  // Hide all end screens
+  document.getElementById('crashScreen').style.display  = 'none';
+  document.getElementById('winScreen').style.display    = 'none';
+  document.getElementById('loseScreen').style.display   = 'none';
+  resetSubmitUI();
+}
+
+['tryAgainBtn', 'winTryAgainBtn', 'loseTryAgainBtn'].forEach(id =>
+  document.getElementById(id).addEventListener('click', resetGame));
+
+// Phone inputs
+let phonePitch      = 0;  // > 0 = nose up
+let phoneRoll       = 0;  // > 0 = right bank
+let phoneCalibrated = false;
+
+// Smoothed control values — adds subtle inertia so inputs aren't instant
+let ctrlPitch = 0;
+let ctrlRoll  = 0;
+
+// Keyboard
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (['w','s',' '].includes(e.key.toLowerCase())) e.preventDefault();
+  if (e.key === ' ') {
+    if (gameEnded) { resetGame(); return; }
+    if (calState > 0 && calState < 5) advanceCal();
+  }
+  if (e.key.toLowerCase() === 'r') startCal();  // R = recalibrate
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+/* ── Calibration state machine (spacebar-driven, computer-side) ──
+   latestG: raw accelerometer from phone's most recent gyro message
+   calState: 0=off  1=waiting for motion sensors (auto-advance on first gyro)
+             2=hold-level  3=tilt-up  4=bank-right  5=done              */
+let calState    = 0;
+let computerWS  = null;    // ref to the WS so we can send to phone
+const latestG   = { x: 0, y: 0, z: 0 };
+let latestGHasData = false;
+const calSnapG  = { x: 0, y: 0, z: 0 };  // captured at "hold level"
+let calGravAxis = 'y', calGravSign = -1;
+let calPitchAxis = 'z', calPitchSign = 1;
+let calRollAxis  = 'x', calRollSign  = 1;
+
+const CAL_STEPS = {
+  1: {
+    step: '', title: 'ENABLE MOTION SENSORS',
+    sub: 'On your phone, tap the <strong style="color:#fff">Enable Motion Sensors</strong> button now',
+    phoneTransform: 'none',
+    noSpacebar: true,   // this step auto-advances — spacebar does nothing
+  },
+  2: {
+    step: '0/2', title: 'HOLD PHONE LEVEL',
+    sub: 'Rest the phone flat on the table, screen up. You\'ll hold it like a pilot\'s throttle lever — push forward to dive, pull back to climb.',
+    phoneTransform: 'none',
+  },
+  3: {
+    step: '1/2', title: 'TILT NOSE DOWN',
+    sub: 'Hold the phone like a lever and push the top away from you — like pushing the throttle forward to dive. Hold it there.',
+    phoneTransform: 'rotateX(-50deg)',
+  },
+  4: {
+    step: '2/2', title: 'BANK RIGHT',
+    sub: 'Now roll your wrist right, tipping the phone like banking the plane into a right turn. Hold it there.',
+    phoneTransform: 'rotateZ(40deg)',
+  },
+};
+
+function startCal() {
+  if (!computerWS || computerWS.readyState !== 1) return;
+  // Skip "enable motion" step when re-calibrating or if data already flowing
+  const firstStep = latestGHasData ? 2 : 1;
+  calState = firstStep;
+  const ov = document.getElementById('calOverlay');
+  ov.classList.add('active');
+  ov.classList.remove('done');
+  applyCalStep(firstStep);
+}
+
+function applyCalStep(s) {
+  const cfg = CAL_STEPS[s];
+  if (!cfg) return;
+  document.getElementById('calOvStepNum').textContent    = cfg.step ? ' · ' + cfg.step : '';
+  document.getElementById('calOvTitle').textContent      = cfg.title;
+  document.getElementById('calOvSub').innerHTML          = cfg.sub;
+  document.getElementById('calPhoneSvg').style.transform = cfg.phoneTransform;
+  // Floor element is a sibling — never rotates with the phone SVG
+  const floorEl = document.getElementById('calFloorEl');
+  if (floorEl) floorEl.style.display = s >= 2 ? 'block' : 'none';
+  // Show/hide spacebar hint
+  const hint = document.querySelector('.cal-spacebar-hint');
+  if (hint) hint.style.opacity = cfg.noSpacebar ? '0.25' : '1';
+}
+
+function advanceCal() {
+  if (calState === 0 || calState === 5) return;
+  if (CAL_STEPS[calState] && CAL_STEPS[calState].noSpacebar) return; // state 1: wait for auto
+
+  const MIN_DELTA = 1.5;
+
+  if (calState === 2) {
+    // Snapshot neutral G + detect gravity axis
+    calSnapG.x = latestG.x; calSnapG.y = latestG.y; calSnapG.z = latestG.z;
+    const aX = Math.abs(calSnapG.x), aY = Math.abs(calSnapG.y), aZ = Math.abs(calSnapG.z);
+    if      (aY >= aX && aY >= aZ) calGravAxis = 'y';
+    else if (aX >= aZ)             calGravAxis = 'x';
+    else                           calGravAxis = 'z';
+    calGravSign = calSnapG[calGravAxis] >= 0 ? 1 : -1;
+    calState = 3;
+    applyCalStep(3);
+
+  } else if (calState === 3) {
+    // Detect pitch axis (which axis changed most vs neutral, excluding gravity axis)
+    const d = { x: latestG.x-calSnapG.x, y: latestG.y-calSnapG.y, z: latestG.z-calSnapG.z };
+    d[calGravAxis] = 0;
+    const [ax, dv] = Object.entries(d).sort((a,b) => Math.abs(b[1])-Math.abs(a[1]))[0];
+    if (Math.abs(dv) < MIN_DELTA) return; // not tilted enough — wait
+    calPitchAxis = ax; calPitchSign = dv >= 0 ? 1 : -1;
+    calState = 4;
+    applyCalStep(4);
+
+  } else if (calState === 4) {
+    // Detect roll axis
+    const d = { x: latestG.x-calSnapG.x, y: latestG.y-calSnapG.y, z: latestG.z-calSnapG.z };
+    d[calGravAxis] = 0; d[calPitchAxis] = 0;
+    const [ax, dv] = Object.entries(d).sort((a,b) => Math.abs(b[1])-Math.abs(a[1]))[0];
+    if (Math.abs(dv) < MIN_DELTA) return;
+    calRollAxis = ax; calRollSign = dv >= 0 ? 1 : -1;
+
+    // Compute neutral pitch/roll from the level-hold snapshot
+    const denom = calGravSign * calSnapG[calGravAxis];
+    const nPitch = Math.atan2(calPitchSign * calSnapG[calPitchAxis], denom) * 180 / Math.PI;
+    const nRoll  = Math.atan2(calRollSign  * calSnapG[calRollAxis],  denom) * 180 / Math.PI;
+
+    // Send the full axis map to the phone
+    if (computerWS && computerWS.readyState === 1) {
+      computerWS.send(JSON.stringify({
+        type: 'cal_axes',
+        gravAxis: calGravAxis, gravSign: calGravSign,
+        pitchAxis: calPitchAxis, pitchSign: calPitchSign,
+        rollAxis: calRollAxis,   rollSign:  calRollSign,
+        neutralPitch: nPitch, neutralRoll: nRoll,
+      }));
+    }
+    console.log('[Cal] grav:', calGravAxis, calGravSign,
+                '| pitch:', calPitchAxis, calPitchSign,
+                '| roll:', calRollAxis, calRollSign);
+
+    calState = 5;
+    const ov = document.getElementById('calOverlay');
+    ov.classList.add('done');
+    document.getElementById('calOvTitle').textContent    = 'CALIBRATED';
+    document.getElementById('calOvStepNum').textContent  = '';
+    document.getElementById('calOvSub').textContent      = 'USE WASD + PHONE TO CONTROL THE PLANE';
+    setTimeout(() => ov.classList.remove('active', 'done'), 3000);
+  }
+}
+
+const MAX_SPEED          = 78;   // m/s ≈ 152 kts
+const MAX_PITCH          = 45;   // degrees
+const MAX_ROLL           = 90;   // degrees
+const TURN_RATE          = 48;   // max deg/sec at full roll + speed
+const GRAVITY            = 22;
+const CTRL_RESP          = 7;    // control inertia — lower = more lag
+const LANDING_SPEED_LIMIT = 30;  // m/s (~58 kts) — max safe touchdown speed
+const NOSEDIVE_LIMIT      = -5;  // degrees — any pitch below this on impact = crash
+const YAW_RATE            = 31;  // deg/s for A / D keyboard yaw (44 × 0.7)
+
+const _camPos  = new THREE.Vector3();
+const _lookAt  = new THREE.Vector3();
+const _forward = new THREE.Vector3();
+
+// Ring collision helpers — works for any ring orientation
+const _prevPlanePos    = new THREE.Vector3(0, 1.5, 215);
+const _ringCross       = new THREE.Vector3();   // reused each frame
+const _ringNormal      = new THREE.Vector3();   // ring's world-space hole axis
+const _ringToPlane     = new THREE.Vector3();   // scratch vector (allocation-free)
+const RING_ANGLE_LIMIT = Math.cos(80 * Math.PI / 180); // cos(80°) ≈ 0.174
+const RING_RADIUS      = 14;                    // matches TorusGeometry first arg
+
+function updateFlight(dt) {
+  if (gameEnded) return;
+  const kts      = speed * 1.94384;
+  const onGround = airplane.position.y <= 1.7;
+
+  /* ── Throttle ── */
+  if (keys['w']) {
+    throttle = Math.min(1, throttle + dt * 0.85);
+  } else if (keys['s']) {
+    throttle = Math.max(0, throttle - dt * 2.0);
+    if (onGround) speed = Math.max(0, speed - 38 * dt);  // wheel brakes — ground only
+  } else {
+    throttle = Math.max(0, throttle - dt * 0.2);          // idle decay ~5 s to zero
+  }
+
+  /* ── Speed ── */
+  const targetSpeed = throttle * MAX_SPEED;
+  const sdiff = targetSpeed - speed;
+  if (sdiff >= 0 || onGround) {
+    speed += sdiff * Math.min(dt * 1.3, 1);   // accelerating or on ground: snappy
+  } else if (keys['s']) {
+    speed += sdiff * Math.min(dt * 0.06, 1);  // S in air: barely decels (no mid-air stop)
+  } else {
+    speed += sdiff * Math.min(dt * 0.12, 1);  // idle in air: slow bleed → long diagonal glide
+  }
+  speed = Math.max(0, speed);
+
+  /* ── Control inertia: smooth toward phone input ── */
+  const agl = airplane.position.y - 1.5;   // height above ground level
+
+  // Start timer on first liftoff
+  if (!timerStarted && agl > 1.0) {
+    timerStarted = true;
+    timerActive  = true;
+    document.getElementById('timerDisp').classList.add('active');
+  }
+
+  let tPitch = phoneCalibrated ? Math.max(-MAX_PITCH, Math.min(MAX_PITCH, phonePitch)) : 0;
+  let tRoll  = phoneCalibrated ? Math.max(-MAX_ROLL,  Math.min(MAX_ROLL,  phoneRoll))  : 0;
+  // On the runway only: cap nose-up to 30%, kill roll — does NOT affect airborne flight
+  if (onGround) { tPitch = Math.max(0, Math.min(MAX_PITCH * 0.3, tPitch)); tRoll = 0; }
+  ctrlPitch += (tPitch - ctrlPitch) * CTRL_RESP * dt;
+  ctrlRoll  += (tRoll  - ctrlRoll)  * CTRL_RESP * dt;
+
+  const pitchDeg = ctrlPitch;
+  const rollDeg  = ctrlRoll;
+
+  /* ── Heading from bank + A/D keyboard yaw ── */
+  heading += (rollDeg / MAX_ROLL) * TURN_RATE * (speed / MAX_SPEED) * dt;
+  if (keys['a']) heading -= YAW_RATE * dt;
+  if (keys['d']) heading += YAW_RATE * dt;
+
+  /* ── Visual orientation ── */
+  airplane.rotation.order = 'YXZ';
+  airplane.rotation.y = -heading * Math.PI / 180;
+  airplane.rotation.x =  pitchDeg * Math.PI / 180;
+  airplane.rotation.z = -rollDeg  * Math.PI / 180;
+
+  /* ── Movement: _forward (nose direction) + smooth liftFactor for gravity ──
+     liftFactor ramps 0→1 between 60–110 kts:
+       < 60 kts  → full gravity, ground clamp keeps plane on runway
+       60–110 kts → gravity fades, pitch component gently lifts the nose
+       > 110 kts  → weightless, flying purely along nose vector             */
+  _forward.set(0, 0, -1).applyEuler(airplane.rotation);
+  // liftFactor: speed gives max potential lift, throttle scales how much you actually get
+  // no throttle = 20% lift max → plane drops noticeably when engine cuts
+  const speedLift  = Math.max(0, Math.min(1, (kts - 80) / 70));
+  const liftFactor = speedLift * throttle;   // zero throttle = zero lift, full gravity
+
+  airplane.position.addScaledVector(_forward, speed * boostMult * dt);
+  airplane.position.y -= GRAVITY * (1 - liftFactor) * dt;
+
+  /* ── Ground clamp + landing / crash check ── */
+  if (airplane.position.y < 1.5) {
+    airplane.position.y = 1.5;
+
+    if (!onGround) {                             // was above 1.7 m before this frame
+      if (ctrlPitch < NOSEDIVE_LIMIT) {
+        // Nose was pointing down on impact → crash
+        triggerCrash(); return;
+      } else if (speed > LANDING_SPEED_LIMIT) {
+        // Hit the ground too fast → crash
+        triggerCrash(); return;
+      }
+      // Nose up (or level) + slow enough → safe landing, just clamp
+    }
+  }
+
+  /* ── Chase camera — pulls back during boost, smooth lerp ── */
+  const hRad = -heading * Math.PI / 180;
+  // Boost: push camera ~5 units further back, fade in over 0.3s, out over 0.5s
+  let camBoost = 0;
+  if (boostActive) {
+    const elapsed = CLOUD_BOOST_DUR - boostTimer;
+    camBoost = Math.min(1, elapsed / 0.3) * (boostTimer < 0.5 ? boostTimer / 0.5 : 1) * 5;
+  }
+  const camDist = 14 + camBoost;
+  _camPos.set(
+    airplane.position.x + Math.sin(hRad) * camDist,
+    airplane.position.y + 4.5,
+    airplane.position.z + Math.cos(hRad) * camDist
+  );
+  // Faster lerp during boost onset so camera snaps back dramatically
+  const camLerp = boostActive && (CLOUD_BOOST_DUR - boostTimer) < 0.4 ? 0.14 : 0.07;
+  camera.position.lerp(_camPos, camLerp);
+
+  _lookAt.copy(airplane.position);
+  _lookAt.y += 1.2;
+  camera.lookAt(_lookAt);
+
+  /* ── Move sun with airplane ── */
+  sun.position.set(
+    airplane.position.x + 100,
+    airplane.position.y + 220,
+    airplane.position.z + 120
+  );
+  if (sun.target) {
+    sun.target.position.copy(airplane.position);
+    sun.target.updateMatrixWorld();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ATTITUDE INDICATOR (mini canvas)
+═══════════════════════════════════════════════════════════ */
+
+// beta: 90 = level. >90 = nose up. <90 = nose down.
+// gamma: roll angle in degrees.
+function drawAttitude(beta, gamma) {
+  const cv  = document.getElementById('ai');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const cx = W / 2, cy = H / 2;
+  const r  = Math.min(cx, cy) - 3;
+
+  const pitchDeg   = beta - 90;
+  const rollRad    = -gamma * Math.PI / 180;
+  const pixPerDeg  = r / 38;
+  const pitchShift = pitchDeg * pixPerDeg;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Clip to circle
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip();
+
+  // Rotate sky/ground with roll
+  ctx.translate(cx, cy); ctx.rotate(rollRad); ctx.translate(-cx, -cy);
+
+  const horizY = cy + pitchShift;
+
+  // Sky
+  ctx.fillStyle = '#1158a8';
+  ctx.fillRect(cx - r * 2, cy - r * 2, r * 4, horizY - (cy - r * 2));
+  // Ground
+  ctx.fillStyle = '#5a3620';
+  ctx.fillRect(cx - r * 2, horizY, r * 4, r * 4);
+  // Horizon line
+  ctx.strokeStyle = 'rgba(255,255,255,0.82)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(cx - r * 2, horizY); ctx.lineTo(cx + r * 2, horizY); ctx.stroke();
+
+  // Pitch lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 1;
+  for (let d = -30; d <= 30; d += 10) {
+    if (d === 0) continue;
+    const ly = horizY - d * pixPerDeg;
+    const hw = Math.abs(d) % 20 === 0 ? 28 : 16;
+    ctx.beginPath(); ctx.moveTo(cx - hw, ly); ctx.lineTo(cx + hw, ly); ctx.stroke();
+  }
+
+  ctx.restore();
+
+  // Circle border — two rings for depth
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,212,255,0.5)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, r + 3, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,212,255,0.15)'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Cross-hair ticks
+  ctx.strokeStyle = 'rgba(0,212,255,0.35)'; ctx.lineWidth = 1;
+  [[0,-r],[0,r],[-r,0],[r,0]].forEach(([dx,dy]) => {
+    ctx.beginPath();
+    ctx.moveTo(cx + dx * 0.85, cy + dy * 0.85);
+    ctx.lineTo(cx + dx, cy + dy);
+    ctx.stroke();
+  });
+
+  // Fixed airplane symbol (amber)
+  ctx.strokeStyle = '#ffd200'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+  ctx.shadowColor = '#ffd200'; ctx.shadowBlur = 6;
+  ctx.beginPath(); ctx.moveTo(cx - 32, cy + 3); ctx.lineTo(cx - 10, cy + 3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 10, cy + 3); ctx.lineTo(cx + 32, cy + 3); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy + 3, 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffd200'; ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   WEBSOCKET / SESSION
+═══════════════════════════════════════════════════════════ */
+
+const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+async function initSession() {
+  const res = await fetch('/api/session');
+  const { code, qrDataUrl } = await res.json();
+  document.getElementById('qrImg').src     = qrDataUrl;
+  document.getElementById('codeDisp').textContent = code;
+  connectWS(code);
+}
+
+function connectWS(code) {
+  const ws = new WebSocket(`${wsProto}//${location.host}/ws?code=${code}&role=computer`);
+  computerWS = ws;   // store so startCal / advanceCal can send to phone
+
+  ws.onopen  = () => console.log('[computer] WS open');
+  ws.onclose = () => {
+    computerWS = null;
+    setTimeout(() => connectWS(code), 2000);
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === 'phone_connected') {
+      document.getElementById('qcard').classList.add('hide');
+      document.getElementById('pbadge').classList.add('show');
+      document.getElementById('warn').classList.add('hide');
+      document.getElementById('calWarn').classList.add('hide');
+      startCal();   // begin spacebar-driven calibration immediately
+
+    } else if (msg.type === 'phone_disconnected') {
+      document.getElementById('qcard').classList.remove('hide');
+      document.getElementById('pbadge').classList.remove('show');
+      document.getElementById('warn').classList.remove('hide');
+      document.getElementById('calWarn').classList.add('hide');
+      // hide cal overlay if showing
+      document.getElementById('calOverlay').classList.remove('active');
+      calState = 0;
+      latestGHasData = false;
+      phoneCalibrated = false;
+      phonePitch = 0;
+      phoneRoll  = 0;
+
+    } else if (msg.type === 'gyro') {
+      // Track raw accelerometer values for calibration axis detection
+      if (msg.gx != null) {
+        latestG.x = msg.gx;
+        latestG.y = msg.gy;
+        latestG.z = msg.gz;
+        // Auto-advance past "ENABLE MOTION SENSORS" step on first real sensor data
+        if (!latestGHasData) {
+          latestGHasData = true;
+          if (calState === 1) { calState = 2; applyCalStep(2); }
+        }
+      }
+      phonePitch      = msg.pitch ?? 0;
+      phoneRoll       = msg.roll  ?? 0;
+      phoneCalibrated = msg.calibrated === true;
+
+      if (phoneCalibrated) {
+        document.getElementById('calWarn').classList.add('hide');
+      }
+    }
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN LOOP
+═══════════════════════════════════════════════════════════ */
+
+let last = performance.now();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  const dt  = Math.min((now - last) / 1000, 0.05);
+  last = now;
+
+  updateFlight(dt);
+
+  // Telemetry HUD
+  const kts = Math.round(speed * 1.94384);
+  const alt = Math.round(airplane.position.y);
+  const hdg = ((Math.round(heading) % 360) + 360) % 360;
+
+  document.getElementById('tvSpd').textContent = kts;
+  document.getElementById('tvAlt').textContent = alt;
+  document.getElementById('tvHdg').textContent = String(hdg).padStart(3, '0');
+  document.getElementById('tbar').style.width  = (throttle * 100).toFixed(1) + '%';
+
+  // Attitude indicator
+  // phonePitch > 0 = nose up → beta > 90
+  // phoneRoll = bank angle
+  drawAttitude(phonePitch + 90, phoneRoll);
+
+  // Propeller spin — fades in/out over ~2 s
+  propSpeed += (throttle * 25 - propSpeed) * Math.min(dt / 2.0, 1);
+  if (propeller) propeller.rotation.z -= propSpeed * dt;
+
+  // Ring_1 and Ring_2 spin in opposite directions
+  ringSpinners.forEach(({ r1, r2 }) => {
+    if (r1) r1.rotation.y += RING_SPIN * dt;
+    if (r2) r2.rotation.y -= RING_SPIN * dt;
+  });
+
+  // Collision detection — buildings only (trees are passable)
+  if (!gameEnded) {
+    const px = airplane.position.x;
+    const py = airplane.position.y;
+    const pz = airplane.position.z;
+    const PLANE_R = 4;
+    for (const c of colliders) {
+      const dx = px - c.x, dz = pz - c.z;
+      if (Math.sqrt(dx * dx + dz * dz) < c.radius + PLANE_R && py < c.top + 3) {
+        triggerCrash();
+        break;
+      }
+    }
+  }
+
+  // Timer countdown
+  if (timerActive && !gameEnded) {
+    timeElapsed += dt;
+    const timeLeft = Math.max(0, TIME_LIMIT - timeElapsed);
+    document.getElementById('tvTimer').textContent = timeLeft.toFixed(2);
+    if (timeLeft < 10) document.getElementById('timerDisp').classList.add('low');
+    if (timeElapsed >= TIME_LIMIT) {
+      timerActive = false;
+      triggerLose();
+    }
+  }
+
+  // Speed-boost clouds
+  if (!gameEnded) {
+    const px = airplane.position.x, py = airplane.position.y, pz = airplane.position.z;
+    clouds.forEach(cloud => {
+      // Tick cooldown for inactive clouds
+      if (!cloud.userData.active) {
+        cloud.userData.cooldown -= dt;
+        if (cloud.userData.cooldown <= 0) {
+          cloud.userData.active = true;
+          cloud.visible = true;
+        }
+        return;
+      }
+      const dx = px - cloud.position.x;
+      const dy = py - cloud.position.y;
+      const dz = pz - cloud.position.z;
+      if (Math.sqrt(dx*dx + dy*dy + dz*dz) < CLOUD_COLLECT_R) {
+        cloud.userData.active   = false;
+        cloud.userData.cooldown = CLOUD_COOLDOWN;
+        cloud.visible = false;
+        boostActive      = true;
+        cloudBoostActive = true;
+        boostTimer       = CLOUD_BOOST_DUR;
+        boostMult        = CLOUD_BOOST_MULT;
+      }
+    });
+  }
+
+  // Boost countdown — last 0.5s smoothly ramps speed back to normal
+  if (boostActive) {
+    boostTimer -= dt;
+    if (boostTimer <= 0) {
+      boostActive      = false;
+      cloudBoostActive = false;
+      boostMult        = 1;
+    } else if (boostTimer < 0.5) {
+      boostMult = 1 + (CLOUD_BOOST_MULT - 1) * (boostTimer / 0.5);
+    }
+  }
+
+  // Speed-boost streak lines — slide backward, loop, fade in/out
+  {
+    let streakAlpha = 0;
+    if (cloudBoostActive) {
+      const elapsed = CLOUD_BOOST_DUR - boostTimer;
+      const fadeIn  = Math.min(1, elapsed / 0.08);
+      const fadeOut = boostTimer < 0.5 ? boostTimer / 0.5 : 1;
+      streakAlpha   = fadeIn * fadeOut * 0.7;
+    }
+    if (streakAlpha > 0) {
+      _speedLineSlots.forEach(slot => {
+        slot.phase = (slot.phase + STREAK_SPEED * dt) % STREAK_TRAVEL;
+        slot.mesh.position.z = slot.baseZ + slot.phase;
+      });
+    }
+    _speedLineMat.opacity = streakAlpha;
+  }
+
+
+  // Rings — orientation-aware intersection + 70° angle gate
+  rings.forEach(ring => {
+    if (ring.userData.collected) return;
+
+    // 1. Ring normal = ring group's local +Z axis rotated into world space
+    _ringNormal.set(0, 0, 1).applyEuler(ring.rotation);
+
+    // 2. Angle check: plane's forward must be within 70° of ring's normal (either face)
+    if (Math.abs(_forward.dot(_ringNormal)) < RING_ANGLE_LIMIT) return;
+
+    // 3. Signed distance of plane from ring's plane along normal (prev & current frame)
+    _ringToPlane.subVectors(_prevPlanePos, ring.position);
+    const prevDN = _ringToPlane.dot(_ringNormal);
+    _ringToPlane.subVectors(airplane.position, ring.position);
+    const currDN = _ringToPlane.dot(_ringNormal);
+    if (prevDN * currDN > 0) return;   // same side — no crossing this frame
+
+    // 4. Lerp exact crossing point along the flight path
+    const t = prevDN / (prevDN - currDN);
+    _ringCross.lerpVectors(_prevPlanePos, airplane.position, t);
+
+    // 5. In-plane distance: project crossing onto ring's plane, measure from centre
+    _ringToPlane.subVectors(_ringCross, ring.position);
+    _ringToPlane.addScaledVector(_ringNormal, -_ringToPlane.dot(_ringNormal));
+    if (_ringToPlane.length() > RING_RADIUS) return;
+
+    // ✓ Valid pass — collect ring
+    ring.userData.collected = true;
+    ring.traverse(child => {
+      if (child.name === '_ringStar') { child.visible = false; return; }
+      if (!child.isMesh) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach(m => { if (m && m.emissive) { m.emissive.setHex(0x0044ff); m.emissiveIntensity = 1.2; } });
+    });
+    if (ring.userData.light) {
+      ring.userData.light.color.setHex(0x0044ff);
+      ring.userData.light.intensity = 1.0;
+    }
+    boostActive = true;
+    boostMult   = Math.max(boostMult, 1.4);
+    boostTimer  = Math.max(boostTimer, 1.5);
+    const collectedCount = rings.filter(r => r.userData.collected).length;
+    const rcEl = document.getElementById('ringCount');
+    const tvRingsEl = document.getElementById('tvRings');
+    if (tvRingsEl) tvRingsEl.textContent = collectedCount;
+    if (rcEl && !rcEl.classList.contains('active')) rcEl.classList.add('active');
+    scheduleStarBurst();
+    if (timerActive && rings.every(r => r.userData.collected)) {
+      timerActive = false;
+      triggerWin();
+    }
+  });
+
+  // Keep previous position for next frame's crossing check
+  _prevPlanePos.copy(airplane.position);
+
+  // ── Gold star particles ──
+  // Tick staggered spawn queue (counts down delay, fires when ready)
+  for (let i = starPending.length - 1; i >= 0; i--) {
+    starPending[i].delay -= dt;
+    if (starPending[i].delay <= 0) {
+      _spawnOneStar();
+      starPending.splice(i, 1);
+    }
+  }
+  // Advance each active star's animation; hide when finished
+  starPool.forEach(slot => {
+    if (!slot.active) return;
+    slot.mixer.update(dt);
+    slot.lifeTimer += dt;
+    if (slot.lifeTimer >= slot.duration + 0.05) {
+      slot.active = false;
+      slot.wrapper.visible = false;
+    }
+  });
+
+  renderer.render(scene, camera);
+}
+
+initSession();
+animate();
+
+</script>
+</body>
+</html>

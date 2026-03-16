@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Flight Sim — Controller</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cyan:   #00d4ff;
+      --green:  #00ff8f;
+      --amber:  #ffd200;
+      --red:    #ff3b3b;
+      --panel:  rgba(2,8,22,0.95);
+      --border: rgba(0,212,255,0.2);
+      --font-display: 'Orbitron', monospace;
+      --font-hud:     'Share Tech Mono', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #00080f;
+      color: #c8dff0;
+      font-family: var(--font-hud);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
+      gap: 16px;
+    }
+
+    h1 {
+      font-family: var(--font-display);
+      font-size: 0.9rem; letter-spacing: 7px;
+      color: var(--cyan);
+      text-shadow: 0 0 10px var(--cyan), 0 0 30px rgba(0,212,255,0.3);
+      text-transform: uppercase;
+    }
+
+    .card {
+      background: rgba(2,8,22,0.92);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 28px 24px;
+      width: 100%;
+      max-width: 360px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      position: relative;
+    }
+    /* corner brackets */
+    .card::before {
+      content:''; position:absolute; top:10px; left:10px;
+      width:14px; height:14px;
+      border:2px solid var(--cyan); border-right:0; border-bottom:0;
+      opacity:0.4;
+    }
+    .card::after {
+      content:''; position:absolute; top:10px; right:10px;
+      width:14px; height:14px;
+      border:2px solid var(--cyan); border-left:0; border-bottom:0;
+      opacity:0.4;
+    }
+
+    .card p {
+      font-size: 0.78rem; letter-spacing: 1.5px;
+      color: rgba(0,212,255,0.45); text-align: center; line-height: 1.7;
+    }
+
+    input[type="number"] {
+      background: rgba(0,0,0,0.6);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #e8f4ff;
+      font-family: var(--font-display);
+      font-size: 2.4rem; letter-spacing: 12px;
+      text-align: center;
+      padding: 16px 10px;
+      width: 100%;
+      -moz-appearance: textfield;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    input[type="number"]:focus {
+      outline: none;
+      border-color: rgba(0,212,255,0.5);
+      box-shadow: 0 0 20px rgba(0,212,255,0.1);
+    }
+
+    button {
+      background: rgba(0,212,255,0.08);
+      border: 1px solid rgba(0,212,255,0.4);
+      border-radius: 8px;
+      color: var(--cyan);
+      font-family: var(--font-display);
+      font-size: 0.72rem; letter-spacing: 4px;
+      padding: 15px;
+      width: 100%;
+      cursor: pointer;
+      text-transform: uppercase;
+      text-shadow: 0 0 10px var(--cyan);
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    button:active, button:hover {
+      background: rgba(0,212,255,0.16);
+      box-shadow: 0 0 20px rgba(0,212,255,0.25);
+    }
+
+    /* status banners */
+    .status {
+      width: 100%;
+      padding: 11px 16px;
+      border-radius: 6px;
+      font-size: 0.75rem; letter-spacing: 2px;
+      text-align: center; line-height: 1.6;
+    }
+    .s-ok   { background: rgba(0,40,20,0.8);  color: var(--green); border: 1px solid rgba(0,255,143,0.3); }
+    .s-warn { background: rgba(40,28,0,0.8);  color: var(--amber); border: 1px solid rgba(255,210,0,0.3); }
+    .s-err  { background: rgba(40,0,0,0.8);   color: var(--red);   border: 1px solid rgba(255,59,59,0.3); }
+    .s-info { background: rgba(0,14,30,0.8);  color: var(--cyan);  border: 1px solid var(--border); }
+
+    #tiltCanvas { display: block; border-radius: 50%; }
+
+    .gyro-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      width: 100%;
+    }
+    .g-cell {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 6px;
+      text-align: center;
+    }
+    .g-label {
+      font-size: 0.5rem; letter-spacing: 3px;
+      color: rgba(0,212,255,0.4);
+    }
+    .g-val {
+      font-family: var(--font-display);
+      font-size: 1rem; font-weight: 600;
+      color: #e8f4ff; margin-top: 4px;
+    }
+
+    #calBanner {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 6px;
+      font-size: 0.82rem; letter-spacing: 2px;
+      text-align: center; line-height: 1.8;
+    }
+
+    #screenEntry      { }
+    #screenController { display: none; }
+  </style>
+</head>
+<body>
+
+  <h1>✈ Controller</h1>
+
+  <!-- Screen 1: Enter code -->
+  <div class="card" id="screenEntry">
+    <p>Enter the 6-digit code shown on your computer</p>
+    <input type="number" id="codeInput" placeholder="000000" inputmode="numeric" maxlength="6">
+    <button id="connectBtn">Connect</button>
+    <div id="entryMsg" class="status s-warn" style="display:none"></div>
+  </div>
+
+  <!-- Screen 2: Active controller -->
+  <div class="card" id="screenController">
+    <div id="connStatus" class="status s-ok">✓ Connected to computer</div>
+
+    <button id="permBtn" style="display:none;
+      background:rgba(180,90,0,0.35);
+      border:2px solid rgba(255,160,0,0.7);
+      border-radius:12px;
+      color:#ffcc00;
+      font-family:'Orbitron',monospace;
+      font-size:1.5rem;
+      font-weight:700;
+      letter-spacing:3px;
+      padding:28px 20px;
+      text-shadow:0 0 16px #ff9900, 0 0 40px rgba(255,150,0,0.4);
+      box-shadow:0 0 30px rgba(255,150,0,0.2);
+      line-height:1.4">
+      ENABLE<br>MOTION SENSORS
+    </button>
+
+    <!-- Calibration status — updated when cal_axes arrives -->
+    <div id="calBanner" class="s-info">
+      FOLLOW INSTRUCTIONS<br>ON COMPUTER SCREEN
+    </div>
+
+    <canvas id="tiltCanvas" width="180" height="180"></canvas>
+
+    <div class="gyro-grid">
+      <div class="g-cell">
+        <div class="g-label">PITCH</div>
+        <div class="g-val" id="pPitch">---</div>
+      </div>
+      <div class="g-cell">
+        <div class="g-label">ROLL</div>
+        <div class="g-val" id="pRoll">---</div>
+      </div>
+      <div class="g-cell">
+        <div class="g-label">YAW</div>
+        <div class="g-val" id="pAlpha">—</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    let ws = null;
+    let sendTimer = null;
+
+    // Live accelerometer values
+    const liveG = { x: 0, y: 0, z: 0 };
+
+    let rawPitch = 0, rawRoll = 0;
+    let smoothPitch = 0, smoothRoll = 0;
+    let hasData = false;
+    const SMOOTH = 0.2;
+
+    // Detected axis mapping — sent from computer via cal_axes
+    let gravAxis = 'y', gravSign = -1;
+    let pitchAxis = 'z', pitchSign = 1;
+    let rollAxis  = 'x', rollSign  = 1;
+    let axisDetected = false;
+
+    let neutralPitch = null, neutralRoll = null;
+
+    const _isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    function computeRaw() {
+      const denom = gravSign * liveG[gravAxis];
+      rawPitch = Math.atan2(pitchSign * liveG[pitchAxis], denom) * 180 / Math.PI;
+      rawRoll  = Math.atan2(rollSign  * liveG[rollAxis],  denom) * 180 / Math.PI;
+    }
+
+    // Auto-connect if URL has ?code=
+    const urlCode = new URLSearchParams(location.search).get('code');
+    if (urlCode) {
+      document.getElementById('codeInput').value = urlCode;
+      setTimeout(() => startConnect(urlCode), 400);
+    }
+
+    document.getElementById('connectBtn').addEventListener('click', () => {
+      const v = document.getElementById('codeInput').value.replace(/\D/g, '');
+      if (v.length !== 6) { showEntryMsg('warn', 'Need a 6-digit code'); return; }
+      startConnect(v);
+    });
+
+    document.getElementById('codeInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('connectBtn').click();
+    });
+
+    function showEntryMsg(type, text) {
+      const el = document.getElementById('entryMsg');
+      el.className = 'status s-' + type;
+      el.textContent = text;
+      el.style.display = 'block';
+    }
+
+    function wsSend(obj) {
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+    }
+
+    function startConnect(code) {
+      showEntryMsg('warn', 'Connecting…');
+      ws = new WebSocket(`${wsProto}//${location.host}/ws?code=${code}&role=phone`);
+
+      ws.onopen = () => {
+        document.getElementById('screenEntry').style.display = 'none';
+        document.getElementById('screenController').style.display = 'flex';
+        setupMotion();
+      };
+      ws.onerror = () => showEntryMsg('err', 'Connection failed — check code and WiFi');
+      ws.onclose = () => {
+        clearInterval(sendTimer);
+        const el = document.getElementById('connStatus');
+        el.className = 'status s-err';
+        el.textContent = '⚠ Disconnected — reload to reconnect';
+      };
+
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        const el = document.getElementById('connStatus');
+
+        if (msg.type === 'computer_disconnected') {
+          el.className = 'status s-warn';
+          el.textContent = '⚠ Computer disconnected';
+
+        } else if (msg.type === 'computer_connected') {
+          el.className = 'status s-ok';
+          el.textContent = '✓ Connected to computer';
+
+        } else if (msg.type === 'cal_axes') {
+          // Computer has detected axis mapping — apply it
+          gravAxis  = msg.gravAxis;  gravSign  = msg.gravSign;
+          pitchAxis = msg.pitchAxis; pitchSign = msg.pitchSign;
+          rollAxis  = msg.rollAxis;  rollSign  = msg.rollSign;
+          neutralPitch = msg.neutralPitch;
+          neutralRoll  = msg.neutralRoll;
+          axisDetected = true;
+
+          const banner = document.getElementById('calBanner');
+          banner.className = 's-ok';
+          banner.textContent = '✓ CALIBRATED — READY TO FLY';
+
+          console.log('[cal_axes] grav:', gravAxis, gravSign,
+                      '| pitch:', pitchAxis, pitchSign,
+                      '| roll:', rollAxis, rollSign,
+                      '| neutral P/R:', neutralPitch?.toFixed(1), neutralRoll?.toFixed(1));
+        }
+      };
+    }
+
+    function setupMotion() {
+      if (_isIOS) {
+        if (typeof DeviceMotionEvent !== 'undefined' &&
+            typeof DeviceMotionEvent.requestPermission === 'function') {
+          const btn = document.getElementById('permBtn');
+          btn.style.display = 'block';
+          btn.addEventListener('click', async () => {
+            try {
+              const result = await DeviceMotionEvent.requestPermission();
+              if (result === 'granted') {
+                btn.style.display = 'none';
+                startListening();
+              } else {
+                btn.textContent = '⚠ Motion denied — check Settings > Safari';
+                btn.style.background = 'rgba(90,0,0,0.6)';
+                btn.style.borderColor = 'rgba(255,59,59,0.4)';
+                btn.style.color = '#ff3b3b';
+              }
+            } catch (err) { console.error(err); }
+          });
+          // button already visible — no extra message needed
+        } else {
+          startListening();
+        }
+      } else {
+        startListening();
+      }
+    }
+
+    function startListening() {
+      function onSensor() {
+        computeRaw();
+        smoothPitch = SMOOTH * rawPitch + (1 - SMOOTH) * smoothPitch;
+        smoothRoll  = SMOOTH * rawRoll  + (1 - SMOOTH) * smoothRoll;
+        hasData = true;
+        const pitch = neutralPitch != null ? smoothPitch - neutralPitch : null;
+        const roll  = neutralRoll  != null ? smoothRoll  - neutralRoll  : null;
+        document.getElementById('pPitch').textContent = pitch != null ? fmt(pitch) + '°' : '---';
+        document.getElementById('pRoll').textContent  = roll  != null ? fmt(roll)  + '°' : '---';
+        drawTilt(pitch ?? 0, roll ?? 0, neutralPitch != null);
+      }
+
+      // Unified accelerometer listener — axis signs detected by computer-side wizard
+      window.addEventListener('devicemotion', (e) => {
+        const g = e.accelerationIncludingGravity;
+        if (!g || g.x == null) return;
+        liveG.x = g.x ?? 0;
+        liveG.y = g.y ?? 0;
+        liveG.z = g.z ?? 0;
+        onSensor();
+      });
+
+      // Send gyro at ~30 fps — always include raw G for computer-side axis detection
+      sendTimer = setInterval(() => {
+        if (!hasData || !ws || ws.readyState !== 1) return;
+        const pitch = neutralPitch != null ? smoothPitch - neutralPitch : null;
+        const roll  = neutralRoll  != null ? smoothRoll  - neutralRoll  : null;
+        ws.send(JSON.stringify({
+          type:       'gyro',
+          pitch,
+          roll,
+          calibrated: axisDetected && neutralPitch != null,
+          gx:         liveG.x,
+          gy:         liveG.y,
+          gz:         liveG.z,
+          ts:         Date.now(),
+        }));
+      }, 33);
+    }
+
+    function fmt(v) { return v == null ? '---' : v.toFixed(0); }
+
+    function drawTilt(pitch, roll, calibrated) {
+      const canvas = document.getElementById('tiltCanvas');
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      const cx = W / 2, cy = H / 2;
+      const r = Math.min(cx, cy) - 8;
+
+      ctx.clearRect(0, 0, W, H);
+
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(2,8,22,0.95)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(0,212,255,0.2)'; ctx.lineWidth = 2; ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(0,212,255,0.12)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r);
+      ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy);
+      ctx.stroke();
+
+      [0.33, 0.66].forEach(frac => {
+        ctx.beginPath(); ctx.arc(cx, cy, r * frac, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0,212,255,0.1)'; ctx.lineWidth = 1; ctx.stroke();
+      });
+
+      const rawX = cx + (roll  / 45) * r;
+      const rawY = cy - (pitch / 45) * r;
+      const dx = rawX - cx, dy = rawY - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const bx = dist > r ? cx + (dx / dist) * r : rawX;
+      const by = dist > r ? cy + (dy / dist) * r : rawY;
+
+      const dotColor = calibrated ? '#00ff8f' : '#00d4ff';
+      const grad = ctx.createRadialGradient(bx, by, 0, bx, by, 22);
+      grad.addColorStop(0, calibrated ? 'rgba(0,255,143,0.35)' : 'rgba(0,212,255,0.35)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath(); ctx.arc(bx, by, 22, 0, Math.PI * 2);
+      ctx.fillStyle = grad; ctx.fill();
+
+      ctx.beginPath(); ctx.arc(bx, by, 10, 0, Math.PI * 2);
+      ctx.fillStyle = dotColor; ctx.fill();
+
+      ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+      ctx.strokeStyle = dotColor; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+
+    drawTilt(0, 0, false);
+  </script>
+</body>
+</html>
