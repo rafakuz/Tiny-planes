@@ -222,6 +222,18 @@
     const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     let ws = null;
     let sendTimer = null;
+    let _rtcPeer    = null;
+    let _rtcChannel = null;   // DataChannel received from computer
+
+    function rtcSend(obj) {
+      // Prefer DataChannel (P2P, low latency); fall back to WebSocket
+      const s = JSON.stringify(obj);
+      if (_rtcChannel && _rtcChannel.readyState === 'open') {
+        _rtcChannel.send(s);
+      } else if (ws && ws.readyState === 1) {
+        ws.send(s);
+      }
+    }
 
     // Live accelerometer values
     const liveG = { x: 0, y: 0, z: 0 };
@@ -305,6 +317,38 @@
           el.className = 'status s-ok';
           el.textContent = '✓ Connected to computer';
 
+        } else if (msg.type === 'rtc_offer') {
+          // Computer wants a direct P2P connection — answer it
+          const pc = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+          });
+          _rtcPeer = pc;
+
+          // Receive the DataChannel the computer created
+          pc.ondatachannel = (ev) => {
+            _rtcChannel = ev.channel;
+            _rtcChannel.onopen  = () => console.log('[WebRTC] DataChannel open — gyro is now P2P');
+            _rtcChannel.onclose = () => { _rtcChannel = null; console.log('[WebRTC] DataChannel closed'); };
+          };
+
+          // Relay ICE candidates back to computer via WebSocket
+          pc.onicecandidate = (ev) => {
+            if (ev.candidate && ws.readyState === 1)
+              ws.send(JSON.stringify({ type: 'rtc_ice', candidate: ev.candidate }));
+          };
+
+          pc.setRemoteDescription(msg.sdp)
+            .then(() => pc.createAnswer())
+            .then(answer => pc.setLocalDescription(answer).then(() => answer))
+            .then(answer => {
+              if (ws.readyState === 1)
+                ws.send(JSON.stringify({ type: 'rtc_answer', sdp: pc.localDescription }));
+            })
+            .catch(err => console.warn('[WebRTC] answer failed:', err));
+
+        } else if (msg.type === 'rtc_ice') {
+          if (_rtcPeer) _rtcPeer.addIceCandidate(msg.candidate).catch(() => {});
+
         } else if (msg.type === 'cal_axes') {
           // Computer has detected axis mapping — apply it
           gravAxis  = msg.gravAxis;  gravSign  = msg.gravSign;
@@ -378,12 +422,12 @@
         onSensor();
       });
 
-      // Send gyro at ~30 fps — always include raw G for computer-side axis detection
+      // Send gyro at ~60 fps via DataChannel (P2P) or WebSocket fallback
       sendTimer = setInterval(() => {
-        if (!hasData || !ws || ws.readyState !== 1) return;
+        if (!hasData) return;
         const pitch = neutralPitch != null ? smoothPitch - neutralPitch : null;
         const roll  = neutralRoll  != null ? smoothRoll  - neutralRoll  : null;
-        ws.send(JSON.stringify({
+        rtcSend({
           type:       'gyro',
           pitch,
           roll,
@@ -392,8 +436,8 @@
           gy:         liveG.y,
           gz:         liveG.z,
           ts:         Date.now(),
-        }));
-      }, 33);
+        });
+      }, 16);   // ~60 fps
     }
 
     function fmt(v) { return v == null ? '---' : v.toFixed(0); }

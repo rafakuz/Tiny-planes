@@ -1547,6 +1547,8 @@ window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
              2=hold-level  3=tilt-up  4=bank-right  5=done              */
 let calState    = 0;
 let computerWS  = null;    // ref to the WS so we can send to phone
+let _rtcPeer    = null;    // RTCPeerConnection for WebRTC
+let _rtcReady   = false;   // true once DataChannel is open
 const latestG   = { x: 0, y: 0, z: 0 };
 let latestGHasData = false;
 const calSnapG  = { x: 0, y: 0, z: 0 };  // captured at "hold level"
@@ -1902,13 +1904,60 @@ async function initSession() {
   connectWS(code);
 }
 
+function handleGyroMsg(msg) {
+  if (msg.gx != null) {
+    latestG.x = msg.gx;
+    latestG.y = msg.gy;
+    latestG.z = msg.gz;
+    if (!latestGHasData) {
+      latestGHasData = true;
+      if (calState === 1) { calState = 2; applyCalStep(2); }
+    }
+  }
+  phonePitch      = msg.pitch ?? 0;
+  phoneRoll       = msg.roll  ?? 0;
+  phoneCalibrated = msg.calibrated === true;
+  if (phoneCalibrated) document.getElementById('calWarn').classList.add('hide');
+}
+
+function initWebRTC(ws) {
+  if (_rtcPeer) { _rtcPeer.close(); }
+  _rtcReady = false;
+
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  });
+  _rtcPeer = pc;
+
+  // Create DataChannel — unordered, no retransmits = UDP-like, lowest latency
+  const ch = pc.createDataChannel('gyro', { ordered: false, maxRetransmits: 0 });
+  ch.onopen    = () => { _rtcReady = true;  console.log('[WebRTC] DataChannel open — gyro is now P2P'); };
+  ch.onclose   = () => { _rtcReady = false; console.log('[WebRTC] DataChannel closed'); };
+  ch.onmessage = (e) => handleGyroMsg(JSON.parse(e.data));
+
+  // Relay ICE candidates to phone via WebSocket (signaling only)
+  pc.onicecandidate = (ev) => {
+    if (ev.candidate && ws.readyState === 1)
+      ws.send(JSON.stringify({ type: 'rtc_ice', candidate: ev.candidate }));
+  };
+
+  pc.createOffer()
+    .then(offer => pc.setLocalDescription(offer).then(() => offer))
+    .then(offer => {
+      if (ws.readyState === 1)
+        ws.send(JSON.stringify({ type: 'rtc_offer', sdp: pc.localDescription }));
+    })
+    .catch(err => console.warn('[WebRTC] offer failed:', err));
+}
+
 function connectWS(code) {
   const ws = new WebSocket(`${wsProto}//${location.host}/ws?code=${code}&role=computer`);
-  computerWS = ws;   // store so startCal / advanceCal can send to phone
+  computerWS = ws;
 
   ws.onopen  = () => console.log('[computer] WS open');
   ws.onclose = () => {
     computerWS = null;
+    _rtcReady  = false;
     setTimeout(() => connectWS(code), 2000);
   };
 
@@ -1920,40 +1969,29 @@ function connectWS(code) {
       document.getElementById('pbadge').classList.add('show');
       document.getElementById('warn').classList.add('hide');
       document.getElementById('calWarn').classList.add('hide');
-      startCal();   // begin spacebar-driven calibration immediately
+      initWebRTC(ws);   // kick off WebRTC handshake
+      startCal();
 
     } else if (msg.type === 'phone_disconnected') {
       document.getElementById('qcard').classList.remove('hide');
       document.getElementById('pbadge').classList.remove('show');
       document.getElementById('warn').classList.remove('hide');
       document.getElementById('calWarn').classList.add('hide');
-      // hide cal overlay if showing
       document.getElementById('calOverlay').classList.remove('active');
-      calState = 0;
-      latestGHasData = false;
-      phoneCalibrated = false;
-      phonePitch = 0;
-      phoneRoll  = 0;
+      if (_rtcPeer) { _rtcPeer.close(); _rtcPeer = null; }
+      _rtcReady = false;
+      calState = 0; latestGHasData = false;
+      phoneCalibrated = false; phonePitch = 0; phoneRoll = 0;
 
     } else if (msg.type === 'gyro') {
-      // Track raw accelerometer values for calibration axis detection
-      if (msg.gx != null) {
-        latestG.x = msg.gx;
-        latestG.y = msg.gy;
-        latestG.z = msg.gz;
-        // Auto-advance past "ENABLE MOTION SENSORS" step on first real sensor data
-        if (!latestGHasData) {
-          latestGHasData = true;
-          if (calState === 1) { calState = 2; applyCalStep(2); }
-        }
-      }
-      phonePitch      = msg.pitch ?? 0;
-      phoneRoll       = msg.roll  ?? 0;
-      phoneCalibrated = msg.calibrated === true;
+      // Fallback: gyro arriving via WebSocket (WebRTC not yet open)
+      if (!_rtcReady) handleGyroMsg(msg);
 
-      if (phoneCalibrated) {
-        document.getElementById('calWarn').classList.add('hide');
-      }
+    } else if (msg.type === 'rtc_answer') {
+      if (_rtcPeer) _rtcPeer.setRemoteDescription(msg.sdp).catch(console.warn);
+
+    } else if (msg.type === 'rtc_ice') {
+      if (_rtcPeer) _rtcPeer.addIceCandidate(msg.candidate).catch(() => {});
     }
   };
 }
